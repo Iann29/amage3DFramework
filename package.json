@@ -1,0 +1,30 @@
+{
+  "name": "skate-3d-transition",
+  "version": "1.0.0",
+  "description": "Projeto interativo de transição de vídeo de skate para modelo 3D",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx vite",
+    "build": "npx vite build",
+    "preview": "npx vite preview"
+  },
+  "keywords": [
+    "three.js",
+    "theatre.js",
+    "gsap",
+    "animation",
+    "3d",
+    "skateboard"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@theatre/core": "^0.7.2",
+    "@theatre/studio": "^0.7.2",
+    "gsap": "^3.12.7",
+    "three": "^0.161.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.10"
+  }
+}

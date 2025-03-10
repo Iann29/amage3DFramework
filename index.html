@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skate 3D Experience</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/animation.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Container para o vídeo -->
+    <div id="video-container">
+      <video id="skate-video" playsinline muted>
+        <source src="assets/videos/skate-video.mp4" type="video/mp4">
+        Seu navegador não suporta o elemento de vídeo.
+      </video>
+      <div id="video-controls">
+        <button id="play-pause-btn" aria-label="Play/Pause">▶</button>
+        <div id="progress-bar">
+          <div id="progress-indicator"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Container para a cena Three.js -->
+    <div id="three-container"></div>
+    
+    <!-- UI overlay para informações e controles -->
+    <div id="ui-overlay">
+      <div id="loading-screen">
+        <div class="loader"></div>
+        <p>Carregando experiência...</p>
+      </div>
+      <div id="interaction-hints" class="hidden">
+        <p>Arraste para rotacionar | Scroll para zoom</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts da aplicação -->
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>
