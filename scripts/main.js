@@ -1,112 +1,65 @@
 /**
- * main.js - Script principal do projeto Skate 3D Experience
- * Responsável pela inicialização e coordenação de todos os módulos
+ * main.js - Script principal focado no Theatre.js para animar o skate
  */
 
-// Importação dos módulos da aplicação
-import { 
-  init as initTheatreManager,
-  setupSequence,
-  setSequenceDuration,
-  TIMECODES,
-  goToTimecode,
-  setupKeyframes,
-  playSequence
-} from './theatre-manager.js';
-import { initVideoHandler, videoElement } from './video-handler.js';
-import { initThreeScene, animateThreeScene, updateSceneSize, updateCameraFromProps } from './three-scene.js';
-import { loadSkateModel, updateSkateModel } from './skate-model.js';
+import { initThreeScene } from './three-setup.js';
+import { initTheatre, createSequence, setupKeyframes, updateSequencePosition } from './theatre-simple.js';
 
-// Variáveis globais
-let assetsLoaded = false;
-let applicationReady = false;
-
-// Estado global da aplicação
-const appState = {
-  isInitialized: false,
-  modelLoaded: false,
-  sceneReady: false,
-  videoReady: false,
-  theatreReady: false
-};
+// Inicializar quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', init);
 
 /**
- * Função de inicialização principal
+ * Inicialização principal
  */
 async function init() {
   console.log('Inicializando aplicação...');
   
-  // Mostrar tela de carregamento
-  const loadingScreen = document.getElementById('loading-screen');
-  
   try {
-    // Inicializar Theatre.js
-    await initTheatreManager();
-    console.log('Theatre.js inicializado');
+    // Obter elementos do DOM
+    const threeContainer = document.getElementById('three-container');
+    const videoElement = document.getElementById('skate-video');
+    const loadingScreen = document.getElementById('loading-screen');
     
-    // Inicializar manipulador de vídeo
-    initVideoHandler();
-    console.log('Manipulador de vídeo inicializado');
+    if (!threeContainer || !videoElement) {
+      throw new Error('Elementos necessários não encontrados');
+    }
+    
+    // Configurar o container Three.js para ser visível
+    threeContainer.style.opacity = 1;
+    threeContainer.style.zIndex = 2;
+    
+    // Configurar controles de vídeo
+    setupVideoControls(videoElement);
     
     // Inicializar cena Three.js
-    const threeContainer = document.getElementById('three-container');
-    if (!threeContainer) {
-      console.warn('Elemento three-container não encontrado, criando um novo elemento');
-      const newContainer = document.createElement('div');
-      newContainer.id = 'three-container';
-      newContainer.style.width = '100%';
-      newContainer.style.height = '100%';
-      newContainer.style.position = 'absolute';
-      newContainer.style.top = '0';
-      newContainer.style.left = '0';
-      newContainer.style.zIndex = '1';
-      document.body.appendChild(newContainer);
-      await initThreeScene(newContainer);
-    } else {
-      await initThreeScene(threeContainer);
-    }
+    await initThreeScene(threeContainer);
     console.log('Cena Three.js inicializada');
     
-    // Carregar modelo 3D do skate
-    await loadSkateModel();
-    console.log('Modelo 3D carregado');
+    // Inicializar Theatre.js
+    const theatre = initTheatre();
+    console.log('Theatre.js inicializado');
     
-    // Configurar timeline e sequência depois que o vídeo estiver pronto
-    setTimeout(() => {
-      // Garantir que o videoElement esteja disponível para a timeline
-      if (videoElement) {
-        // Configurar a sequência em Theatre.js
-        const sequenceInstance = setupSequence(videoElement);
-        
-        // Inicializar timeline somente após a sequência estar pronta
-        if (sequenceInstance) {
-          console.log('Sequência configurada com sucesso');
-          
-          // Configurar keyframes para controlar a visibilidade do modelo
-          setupKeyframes();
-          console.log('Keyframes configurados na timeline');
-          
-          // Iniciar a sequência imediatamente para sincronizar com o vídeo
-          if (videoElement.paused === false) {
-            console.log('Vídeo já está em reprodução, iniciando sequência automaticamente');
-            playSequence();
-          }
-          
-          // Nota: A configuração do sistema de transição foi removida
-          // A visibilidade do modelo agora será controlada diretamente 
-          // pela TIMELINE conforme solicitado pelo usuário
-        } else {
-          console.warn('Não foi possível configurar a sequência');
-        }
-      } else {
-        console.warn('Elemento de vídeo não disponível para configurar a timeline');
-      }
-    }, 500); // Pequeno delay para garantir que tudo esteja carregado
+    // Quando o vídeo tiver seus metadados carregados, criar a sequência
+    videoElement.addEventListener('loadedmetadata', () => {
+      const duration = videoElement.duration;
+      console.log('Duração do vídeo:', duration);
+      
+      // Criar sequência com a duração do vídeo
+      const sequence = createSequence(duration);
+      
+      // Configurar keyframes de exemplo
+      setupKeyframes();
+      
+      // Mostrar a interface do Theatre.js
+      showTheatreHelpMessage();
+    });
     
-    // Configurar listeners de eventos
-    setupEventListeners();
+    // Sincronizar o tempo do vídeo com a sequência do Theatre.js
+    videoElement.addEventListener('timeupdate', () => {
+      updateSequencePosition(videoElement.currentTime);
+    });
     
-    // Esconder tela de carregamento após carregamento completo
+    // Esconder a tela de carregamento
     if (loadingScreen) {
       loadingScreen.style.opacity = 0;
       setTimeout(() => {
@@ -114,152 +67,144 @@ async function init() {
       }, 500);
     }
     
-    // Aplicação inicializada com sucesso
-    appState.isInitialized = true;
-    applicationReady = true;
-    
-    // Adicionar métodos públicos ao objeto window para depuração
-    setupPublicAPI();
+    // Tentar reproduzir o vídeo
+    tryPlayVideo(videoElement);
     
   } catch (error) {
-    console.error('Erro durante a inicialização da aplicação:', error);
-    
-    // Exibir mensagem de erro amigável
-    if (loadingScreen) {
-      loadingScreen.innerHTML = `
-        <div class="error-message">
-          <h2>Erro na inicialização</h2>
-          <p>${error.message || 'Não foi possível carregar a aplicação.'}</p>
-          <button onclick="location.reload()">Tentar novamente</button>
-        </div>
-      `;
-    }
+    console.error('Erro durante a inicialização:', error);
+    showErrorMessage(error.message);
   }
 }
 
 /**
- * Configurar listeners de eventos globais
+ * Configurar controles de vídeo
+ * @param {HTMLVideoElement} videoElement - Elemento de vídeo
  */
-function setupEventListeners() {
-  // Listener para redimensionamento da janela
-  window.addEventListener('resize', handleResize);
+function setupVideoControls(videoElement) {
+  const playPauseBtn = document.getElementById('play-pause-btn');
+  const progressBar = document.getElementById('progress-bar');
+  const progressIndicator = document.getElementById('progress-indicator');
   
-  // Verificar compatibilidade WebGL
-  checkWebGLCompatibility();
+  if (!playPauseBtn || !progressBar || !progressIndicator) return;
   
-  // Listener para quando a duração do vídeo estiver disponível
-  document.addEventListener('video-duration-ready', (event) => {
-    const videoDuration = event.detail.duration;
-    console.log('Evento video-duration-ready recebido. Duração:', videoDuration);
-    
-    // Configurar a sequência com a duração correta do vídeo
-    if (typeof setSequenceDuration === 'function') {
-      setSequenceDuration(videoDuration);
-      console.log('Duração da sequência atualizada automaticamente para', videoDuration);
+  // Botão play/pause
+  playPauseBtn.addEventListener('click', () => {
+    if (videoElement.paused || videoElement.ended) {
+      videoElement.play();
+      playPauseBtn.textContent = '❚❚';
+    } else {
+      videoElement.pause();
+      playPauseBtn.textContent = '▶';
     }
+  });
+  
+  // Atualizar barra de progresso
+  videoElement.addEventListener('timeupdate', () => {
+    if (videoElement.duration) {
+      const progress = videoElement.currentTime / videoElement.duration;
+      progressIndicator.style.width = `${progress * 100}%`;
+    }
+  });
+  
+  // Clique na barra de progresso
+  progressBar.addEventListener('click', (event) => {
+    const rect = progressBar.getBoundingClientRect();
+    const pos = (event.clientX - rect.left) / rect.width;
+    videoElement.currentTime = pos * videoElement.duration;
+  });
+}
+
+/**
+ * Tentar reproduzir o vídeo
+ * @param {HTMLVideoElement} videoElement - Elemento de vídeo
+ */
+function tryPlayVideo(videoElement) {
+  videoElement.muted = true; // Para permitir autoplay em mais navegadores
+  videoElement.play().catch(error => {
+    console.warn('Autoplay bloqueado:', error);
     
-    // Ajustar os timecodes para a duração do vídeo
-    if (typeof adjustTimecodes === 'function') {
-      adjustTimecodes(videoDuration);
-      console.log('Timecodes ajustados automaticamente para a duração do vídeo');
+    // Criar botão grande para iniciar o vídeo
+    const playButton = document.createElement('button');
+    playButton.textContent = '▶';
+    playButton.style.position = 'absolute';
+    playButton.style.top = '50%';
+    playButton.style.left = '50%';
+    playButton.style.transform = 'translate(-50%, -50%)';
+    playButton.style.fontSize = '48px';
+    playButton.style.background = 'rgba(0,0,0,0.6)';
+    playButton.style.color = 'white';
+    playButton.style.width = '80px';
+    playButton.style.height = '80px';
+    playButton.style.borderRadius = '50%';
+    playButton.style.border = 'none';
+    playButton.style.cursor = 'pointer';
+    playButton.style.zIndex = '1000';
+    
+    playButton.addEventListener('click', () => {
+      videoElement.play().then(() => {
+        playButton.remove();
+      }).catch(e => console.error('Erro ao iniciar vídeo:', e));
+    });
+    
+    const videoContainer = document.getElementById('video-container');
+    if (videoContainer) {
+      videoContainer.appendChild(playButton);
     }
   });
 }
 
 /**
- * Manipulador de evento de redimensionamento da janela
+ * Mostrar mensagem de ajuda para o Theatre.js
  */
-function handleResize() {
-  // Atualizar tamanho da cena 3D
-  updateSceneSize();
-}
-
-/**
- * Verificar compatibilidade com WebGL
- */
-function checkWebGLCompatibility() {
-  try {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    
-    if (!gl) {
-      showBrowserCompatibilityWarning();
-    }
-  } catch (e) {
-    showBrowserCompatibilityWarning();
-  }
-}
-
-/**
- * Exibir aviso de compatibilidade de navegador
- */
-function showBrowserCompatibilityWarning() {
-  const warningElement = document.createElement('div');
-  warningElement.className = 'browser-warning';
-  warningElement.innerHTML = `
-    <div class="warning-content">
-      <h3>Aviso de Compatibilidade</h3>
-      <p>Seu navegador pode não suportar totalmente WebGL, necessário para a experiência 3D.</p>
-      <p>Para melhor experiência, use Google Chrome, Firefox ou Edge atualizados.</p>
-      <button onclick="this.parentNode.parentNode.style.display='none'">Entendi</button>
-    </div>
+function showTheatreHelpMessage() {
+  const helpMessage = document.createElement('div');
+  helpMessage.style.position = 'fixed';
+  helpMessage.style.top = '10px';
+  helpMessage.style.left = '10px';
+  helpMessage.style.background = 'rgba(0,0,0,0.7)';
+  helpMessage.style.color = 'white';
+  helpMessage.style.padding = '10px';
+  helpMessage.style.borderRadius = '5px';
+  helpMessage.style.zIndex = '1000';
+  helpMessage.style.maxWidth = '300px';
+  helpMessage.style.fontFamily = 'Arial, sans-serif';
+  
+  helpMessage.innerHTML = `
+    <h3>Theatre.js está pronto!</h3>
+    <p>Use o painel do Theatre.js para animar o modelo 3D do skate.</p>
+    <p>Ajuste posição, rotação e escala enquanto o vídeo é reproduzido.</p>
+    <p>A animação está sincronizada com o tempo do vídeo.</p>
+    <button id="close-help" style="background:#f44336; border:none; color:white; padding:5px 10px; margin-top:10px; cursor:pointer;">Fechar</button>
   `;
   
-  document.body.appendChild(warningElement);
+  document.body.appendChild(helpMessage);
+  
+  document.getElementById('close-help').addEventListener('click', () => {
+    helpMessage.remove();
+  });
 }
 
 /**
- * Configurar API pública para depuração
+ * Mostrar mensagem de erro
+ * @param {string} message - Mensagem de erro
  */
-function setupPublicAPI() {
-  // Método auxiliar para forçar a exibição do modelo
-  window.forceShowModelNow = () => {
-    console.log('Tentando forçar a exibição do modelo...');
-    const model = document.querySelector("#three-container");
-    if (model) {
-      model.style.opacity = 1;
-      model.style.visibility = 'visible';
-      model.style.display = 'block';
-      return true;
-    }
-    return false;
-  };
+function showErrorMessage(message) {
+  const errorElement = document.createElement('div');
+  errorElement.style.position = 'fixed';
+  errorElement.style.top = '50%';
+  errorElement.style.left = '50%';
+  errorElement.style.transform = 'translate(-50%, -50%)';
+  errorElement.style.background = 'rgba(255,0,0,0.8)';
+  errorElement.style.color = 'white';
+  errorElement.style.padding = '20px';
+  errorElement.style.borderRadius = '5px';
+  errorElement.style.zIndex = '9999';
   
-  // Método para acessar os timecodes diretamente
-  window.getTimecodes = () => TIMECODES;
+  errorElement.innerHTML = `
+    <h3>Erro!</h3>
+    <p>${message}</p>
+    <button onclick="location.reload()" style="background:white; color:black; border:none; padding:5px 10px; margin-top:10px; cursor:pointer;">Tentar novamente</button>
+  `;
   
-  // Método para ir para um ponto específico da timeline
-  window.goToTimecode = (timecodeKey) => {
-    if (typeof goToTimecode === 'function' && TIMECODES && TIMECODES[timecodeKey]) {
-      goToTimecode(timecodeKey);
-      return true;
-    }
-    return false;
-  };
-  
-  // Método para obter o elemento de vídeo atual
-  window.getCurrentVideoElement = () => videoElement;
-  
-  // Expor funções de atualização para o fix do Theatre.js
-  window.updateSkateModel = updateSkateModel;
-  window.updateCameraFromProps = updateCameraFromProps;
-  
-  // Objeto centralizador para funções de atualização (para o fix)
-  window.theatreUpdateFunctions = {
-    updateSkateModel,
-    updateCameraFromProps
-  };
-  
-  // Para depuração direta no console do navegador
-  console.log('API pública para depuração configurada. Use window.forceShowModelNow(), window.getTimecodes() etc');
+  document.body.appendChild(errorElement);
 }
-
-// Inicializar a aplicação quando o DOM estiver pronto
-document.addEventListener('DOMContentLoaded', init);
-
-// Exportar funções principais
-export {
-  init,
-  appState,
-  videoElement
-};
