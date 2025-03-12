@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import Studio from '@theatre/studio';
 import { getProject, types } from '@theatre/core';
+import { setSkateModelVisible } from './skate-model.js';
 
 // Declarações iniciais - videoElement será definido depois
 let videoElement;
@@ -115,87 +116,68 @@ function setupAnimatableObjects() {
  * Configurar a sequência de animação
  */
 function setupSequence() {
-  // Verificar se o mainSheet foi inicializado
-  if (!mainSheet) {
-    console.error('MainSheet não inicializado. Não é possível configurar a sequência.');
+  // Verificar se o projeto e mainSheet foram inicializados
+  if (!project || !mainSheet) {
+    console.error('Projeto ou MainSheet não inicializado. Não é possível configurar a sequência.');
     return false;
   }
   
   try {
-    // Criar sequência de animação
-    sequence = mainSheet.sequence.create({ 
-      name: 'Main Sequence',
-      length: TIMECODES.INTERACTIVE_START + 1
-    });
+    // A sequência já existe como uma propriedade do mainSheet
+    // Não precisamos criar - apenas acessar
+    sequence = mainSheet.sequence;
     
     if (!sequence) {
-      console.error('Falha ao criar sequência');
+      console.error('Falha ao acessar sequência do mainSheet');
       return false;
     }
     
-    console.log('Sequência criada com sucesso:', sequence);
+    console.log('Sequência acessada com sucesso:', sequence);
     
-    // Configurar keyframes para o vídeo
-    videoProps.onValuesChange((values) => {
-      const videoEl = document.getElementById('skate-video');
-      if (videoEl) {
-        videoEl.style.opacity = values.opacity;
+    // Configurar propriedades da sequência
+    sequence.length = TIMECODES.INTERACTIVE_START + 1;
+    
+    // Configurar keyframes usando o Studio para criar transações
+    Studio.transaction(({ set }) => {
+      // Início do vídeo - 100% opaco
+      sequence.position = 0;
+      set(videoProps.props.opacity, 1);
+      set(blurProps.props.intensity, 0);
+      if (skateModelProps) {
+        set(skateModelProps.props.visible, false);
+        set(skateModelProps.props.scale, 0);
       }
-    });
-    
-    // Adicionar keyframes para o vídeo
-    sequence.position = 0;
-    
-    // Início do vídeo - 100% opaco
-    videoProps.set({ opacity: 1 });
-    blurProps.set({ intensity: 0 });
-    skateModelProps.set({ 
-      visible: false, 
-      scale: 0,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 }
-    });
-    
-    // Pré-manobra
-    sequence.position = TIMECODES.PRE_TRICK;
-    videoProps.set({ opacity: 1 });
-    blurProps.set({ intensity: 0 });
-    
-    // Início da transição - começar blur
-    sequence.position = TIMECODES.TRANSITION_START;
-    blurProps.set({ intensity: 5 });
-    
-    // Meio da transição - blur máximo, começar a aparecer o modelo 3D
-    sequence.position = TIMECODES.TRANSITION_MID;
-    videoProps.set({ opacity: 0.7 });
-    blurProps.set({ intensity: 20 });
-    skateModelProps.set({ 
-      visible: true, 
-      scale: 0.5,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: Math.PI / 6, z: 0 }
-    });
-    
-    // Fim da transição - vídeo quase invisível, modelo 3D quase totalmente visível
-    sequence.position = TIMECODES.TRANSITION_END;
-    videoProps.set({ opacity: 0.3 });
-    blurProps.set({ intensity: 10 });
-    skateModelProps.set({ 
-      visible: true, 
-      scale: 0.8,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: Math.PI / 4, z: 0 }
-    });
-    
-    // Estado interativo - vídeo invisível, modelo 3D totalmente visível
-    sequence.position = TIMECODES.INTERACTIVE_START;
-    videoProps.set({ opacity: 0 });
-    blurProps.set({ intensity: 0 });
-    skateModelProps.set({ 
-      visible: true, 
-      scale: 1,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: Math.PI / 3, z: 0 }
+      
+      // Início da transição - começar blur
+      sequence.position = TIMECODES.TRANSITION_START;
+      set(blurProps.props.intensity, 5);
+      
+      // Meio da transição - blur máximo, começar a aparecer o modelo 3D
+      sequence.position = TIMECODES.TRANSITION_MID;
+      set(videoProps.props.opacity, 0.7);
+      set(blurProps.props.intensity, 20);
+      if (skateModelProps) {
+        set(skateModelProps.props.visible, true);
+        set(skateModelProps.props.scale, 2);
+      }
+      
+      // Fim da transição - vídeo quase invisível, modelo 3D totalmente visível
+      sequence.position = TIMECODES.TRANSITION_END;
+      set(videoProps.props.opacity, 0.3);
+      set(blurProps.props.intensity, 10);
+      if (skateModelProps) {
+        set(skateModelProps.props.visible, true);
+        set(skateModelProps.props.scale, 3);
+      }
+      
+      // Estado interativo - vídeo invisível, modelo 3D totalmente visível
+      sequence.position = TIMECODES.INTERACTIVE_START;
+      set(videoProps.props.opacity, 0);
+      set(blurProps.props.intensity, 0);
+      if (skateModelProps) {
+        set(skateModelProps.props.visible, true);
+        set(skateModelProps.props.scale, 3);
+      }
     });
     
     // Resetar posição da sequência
@@ -204,6 +186,8 @@ function setupSequence() {
     return true;
   } catch (error) {
     console.error('Erro ao configurar sequência:', error);
+    // Se ainda temos erro, usar nossa solução alternativa
+    setSkateModelVisible(true);
     return false;
   }
 }
@@ -213,14 +197,35 @@ function setupSequence() {
  * @param {number} currentTime - Tempo atual do vídeo em segundos
  */
 function updateTimelineFromVideo(currentTime) {
-  // Verificar se a sequência foi inicializada antes de tentar acessá-la
   if (!sequence) {
     console.warn('Sequência ainda não inicializada');
+    
+    // Se não temos sequência mas o vídeo chegou ao ponto de transição,
+    // forçar a exibição do modelo diretamente
+    if (currentTime >= TIMECODES.TRANSITION_START) {
+      console.log('Ativando modelo diretamente via tempo de vídeo:', currentTime);
+      setSkateModelVisible(true);
+    }
     return;
   }
   
-  // Ajustar a posição da sequência com base no tempo do vídeo
-  sequence.position = currentTime;
+  try {
+    // Atualizar posição da sequência com base no tempo do vídeo
+    sequence.position = currentTime;
+    
+    // Ativar visibilidade do modelo quando chegamos ao ponto de transição
+    // Isso serve como backup caso a animação do Theatre.js não funcione
+    if (currentTime >= TIMECODES.TRANSITION_MID) {
+      setSkateModelVisible(true);
+    }
+  } catch (error) {
+    console.error('Erro ao atualizar timeline:', error);
+    
+    // Em caso de erro, ativar o modelo diretamente se estamos no tempo correto
+    if (currentTime >= TIMECODES.TRANSITION_START) {
+      setSkateModelVisible(true);
+    }
+  }
 }
 
 /**

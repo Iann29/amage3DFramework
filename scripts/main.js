@@ -7,7 +7,7 @@
 import './animation.js';  // Apenas importar o módulo para que ele se inicialize
 import { initTheatre, setupSequence } from './animation.js';
 import { initVideoHandler, videoElement } from './video-handler.js';
-import { initThreeScene, animateThreeScene } from './three-scene.js';
+import { initThreeScene, animateThreeScene, updateSceneSize } from './three-scene.js';
 import { loadSkateModel } from './skate-model.js';
 import { setupTransition } from './transition.js';
 
@@ -87,8 +87,10 @@ function setupEventListeners() {
  */
 function handleResize() {
   // Atualizar dimensões da cena Three.js
-  const event = new Event('resize');
-  window.dispatchEvent(event);
+  // NÃO dispare outro evento 'resize' para evitar recursão infinita
+  if (typeof updateSceneSize === 'function') {
+    updateSceneSize();
+  }
 }
 
 /**

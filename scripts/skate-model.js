@@ -187,13 +187,13 @@ function processModel(gltf) {
   // Obter o modelo do objeto GLTF
   skateModel = gltf.scene;
   
-  // Configurar posição e escala inicial
+  // Configurar posição e escala inicial - Aumentando o tamanho e ajustando a posição
   skateModel.position.set(0, 0, 0);
-  skateModel.scale.set(1, 1, 1);
-  skateModel.rotation.set(0, 0, 0);
+  skateModel.scale.set(3, 3, 3); // Aumentamos ainda mais a escala para o modelo ficar mais visível
+  skateModel.rotation.set(0, Math.PI / 4, 0); // Rotacionamos ligeiramente para melhor visualização
   
-  // Inicialmente invisível
-  skateModel.visible = false;
+  // Tornar visível imediatamente (contornando a animação do Theatre.js por enquanto)
+  skateModel.visible = true;
   
   // Otimizar o modelo
   optimizeModel(skateModel);
@@ -206,6 +206,32 @@ function processModel(gltf) {
   
   // Configurar sombras
   setupModelShadows(skateModel);
+  
+  console.log('Modelo processado e adicionado à cena', skateModel);
+  
+  // Adicionar um helper para visualizar o modelo
+  addModelHelper();
+}
+
+/**
+ * Adiciona um helper visual para identificar a posição do modelo
+ */
+function addModelHelper() {
+  if (!skateModel) return;
+  
+  // Criar uma esfera para marcar o centro do modelo
+  const sphereGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+  const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const centerSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+  
+  // Adicionar a esfera à cena
+  skateModel.add(centerSphere);
+  
+  // Criar axes helper para mostrar as direções
+  const axesHelper = new THREE.AxesHelper(2);
+  skateModel.add(axesHelper);
+  
+  console.log('Helpers adicionados ao modelo para melhor visualização');
 }
 
 /**
@@ -231,19 +257,50 @@ function optimizeModel(model) {
  * @param {THREE.Object3D} model - Modelo 3D para configurar materiais
  */
 function setupModelMaterials(model) {
-  // Configuração avançada de materiais
+  // Detectar se o modelo tem materiais
+  let hasMaterials = false;
+  
   model.traverse((node) => {
     if (node.isMesh) {
-      // Garantir que materiais tenham configurações de PBR corretas
+      hasMaterials = true;
+      
+      // Melhorar materiais existentes
       if (node.material) {
-        node.material.envMapIntensity = 1.0;
+        // Garantir que o material seja visível com boa qualidade visual
+        node.material.side = THREE.DoubleSide; // Renderiza ambos os lados do material
+        node.material.shadowSide = THREE.DoubleSide;
         node.material.needsUpdate = true;
         
-        // Adicionar leve emissão para destacar o modelo
-        node.material.emissive = new THREE.Color(0x111111);
+        // Adicionar propriedades físicas ao material, se não existirem
+        if (!node.material.metalness && node.material.metalness !== 0) {
+          node.material.metalness = 0.5;
+        }
+        if (!node.material.roughness && node.material.roughness !== 0) {
+          node.material.roughness = 0.7;
+        }
+        
+        // Destacar o material para visualização mais clara
+        node.material.emissive = new THREE.Color(0x222222);
       }
     }
   });
+  
+  // Se não tiver materiais, adicionar um material padrão
+  if (!hasMaterials && model.children.length > 0) {
+    console.warn('Modelo sem materiais detectáveis, aplicando material padrão');
+    const defaultMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3366cc,
+      metalness: 0.7,
+      roughness: 0.3,
+      side: THREE.DoubleSide
+    });
+    
+    model.traverse((node) => {
+      if (node.isMesh) {
+        node.material = defaultMaterial;
+      }
+    });
+  }
 }
 
 /**
@@ -285,7 +342,21 @@ function updateSkateModel() {
     // Atualizar escala
     const scale = values.scale;
     skateModel.scale.set(scale, scale, scale);
+  } else {
+    // Valores padrão caso não consiga obter do Theatre.js
+    skateModel.visible = true;
   }
+}
+
+/**
+ * Definir a visibilidade do modelo do skate diretamente
+ * @param {boolean} isVisible - Se o modelo deve estar visível ou não
+ */
+function setSkateModelVisible(isVisible) {
+  if (!modelLoaded || !skateModel) return;
+  
+  console.log('Alterando visibilidade do modelo para:', isVisible);
+  skateModel.visible = isVisible;
 }
 
 /**
@@ -309,5 +380,6 @@ export {
   loadSkateModel,
   updateSkateModel,
   isModelLoaded,
-  getSkateModel
+  getSkateModel,
+  setSkateModelVisible
 };

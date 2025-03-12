@@ -58,35 +58,44 @@ function initThreeScene() {
  * Configurar a iluminação da cena
  */
 function setupLighting() {
-  // Luz ambiente
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  // Luz ambiente - aumentada para melhor visibilidade geral
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
   scene.add(ambientLight);
   sceneObjects.ambientLight = ambientLight;
   
-  // Luz direcional principal
-  const mainLight = new THREE.DirectionalLight(0xffffff, 1);
-  mainLight.position.set(5, 5, 5);
+  // Luz direcional principal - ajustada para iluminar o modelo frontalmente
+  const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  mainLight.position.set(2, 5, 5);
   mainLight.castShadow = true;
   scene.add(mainLight);
   sceneObjects.mainLight = mainLight;
   
-  // Configurações de sombra
+  // Configurações de sombra melhoradas
   mainLight.shadow.mapSize.width = 2048;
   mainLight.shadow.mapSize.height = 2048;
   mainLight.shadow.camera.near = 0.5;
   mainLight.shadow.camera.far = 50;
+  mainLight.shadow.bias = -0.0005;
   
-  // Luz de preenchimento
-  const fillLight = new THREE.DirectionalLight(0x8888ff, 0.5);
-  fillLight.position.set(-5, 0, -5);
+  // Luz de preenchimento - aumentada e reposicionada
+  const fillLight = new THREE.DirectionalLight(0x8888ff, 0.7);
+  fillLight.position.set(-5, 2, -2);
   scene.add(fillLight);
   sceneObjects.fillLight = fillLight;
   
-  // Luz de destaque (rim light)
-  const rimLight = new THREE.DirectionalLight(0xffffaa, 0.8);
+  // Luz de destaque (rim light) - intensificada para destacar bordas
+  const rimLight = new THREE.DirectionalLight(0xffffaa, 1.0);
   rimLight.position.set(0, 5, -10);
   scene.add(rimLight);
   sceneObjects.rimLight = rimLight;
+  
+  // Luz adicional inferior para eliminar áreas escuras
+  const bottomLight = new THREE.DirectionalLight(0xaaaaff, 0.5);
+  bottomLight.position.set(0, -5, 0);
+  scene.add(bottomLight);
+  sceneObjects.bottomLight = bottomLight;
+  
+  console.log('Iluminação da cena configurada para melhor visualização do modelo');
 }
 
 /**
@@ -117,9 +126,24 @@ function setupOrbitControls() {
  * Lidar com redimensionamento da janela
  */
 function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  updateSceneSize();
+}
+
+/**
+ * Atualizar o tamanho da cena com base nas dimensões da janela
+ */
+function updateSceneSize() {
+  if (!renderer || !camera) return;
+  
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  
+  // Atualizar aspecto da câmera
+  camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  
+  // Atualizar tamanho do renderer
+  renderer.setSize(width, height);
 }
 
 /**
@@ -220,6 +244,7 @@ export {
   enableModelInteraction,
   addObjectToScene,
   getSceneObject,
+  updateSceneSize,
   scene,
   camera,
   renderer
