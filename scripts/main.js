@@ -208,3 +208,40 @@ function showErrorMessage(message) {
   
   document.body.appendChild(errorElement);
 }
+
+// Adicionar botão de depuração
+setTimeout(() => {
+  const debugButton = document.createElement('button');
+  debugButton.textContent = 'Debug Theatre';
+  debugButton.style.position = 'fixed';
+  debugButton.style.bottom = '70px';
+  debugButton.style.right = '20px';
+  debugButton.style.padding = '10px';
+  debugButton.style.background = 'blue';
+  debugButton.style.color = 'white';
+  debugButton.style.border = 'none';
+  debugButton.style.borderRadius = '4px';
+  debugButton.style.zIndex = '9999';
+  
+  debugButton.addEventListener('click', () => {
+    console.log('==== DEBUG THEATRE.JS ====');
+    console.log('Projeto:', project);
+    console.log('Sheet:', sheet);
+    console.log('Sequence:', sequence);
+    console.log('SkateObj:', skateObj);
+    console.log('Modelo 3D:', window.skateModel);
+    
+    if (sequence) {
+      console.log('Posição atual da sequência:', sequence.position);
+      
+      // Tente forçar uma animação
+      sequence.position = 0;
+      setTimeout(() => {
+        sequence.position = 2;
+        console.log('Forçado posição da sequência para 2s');
+      }, 1000);
+    }
+  });
+  
+  document.body.appendChild(debugButton);
+}, 3000);
