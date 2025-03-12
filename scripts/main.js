@@ -3,7 +3,7 @@
  */
 
 import { initThreeScene } from './three-setup.js';
-import { initTheatre, createSequence, setupKeyframes, updateSequencePosition } from './theatre-simple.js';
+import { initTheatre, updateSequencePosition, setAutoPlay, setPlaybackRate, setSmoothSync, setSmoothness } from './theatre-simple.js';
 
 // Inicializar quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', init);
@@ -39,25 +39,17 @@ async function init() {
     const theatre = initTheatre();
     console.log('Theatre.js inicializado');
     
-    // Quando o vídeo tiver seus metadados carregados, criar a sequência
+    // Quando o vídeo tiver seus metadados carregados
     videoElement.addEventListener('loadedmetadata', () => {
       const duration = videoElement.duration;
       console.log('Duração do vídeo:', duration);
       
-      // Criar sequência com a duração do vídeo
-      const sequence = createSequence(duration);
-      
-      // Configurar keyframes de exemplo
-      setupKeyframes();
-      
-      // Mostrar a interface do Theatre.js
+      // Apenas mostrar a mensagem de ajuda
       showTheatreHelpMessage();
     });
     
-    // Sincronizar o tempo do vídeo com a sequência do Theatre.js
-    videoElement.addEventListener('timeupdate', () => {
-      updateSequencePosition(videoElement.currentTime);
-    });
+    // Adicionar event listeners para o vídeo
+    setupVideoTimelinesListeners(videoElement);
     
     // Esconder a tela de carregamento
     if (loadingScreen) {
@@ -69,6 +61,9 @@ async function init() {
     
     // Tentar reproduzir o vídeo
     tryPlayVideo(videoElement);
+    
+    // Adicionar botão de controle para a timeline
+    addTimelineControlButton();
     
   } catch (error) {
     console.error('Erro durante a inicialização:', error);
@@ -207,6 +202,177 @@ function showErrorMessage(message) {
   `;
   
   document.body.appendChild(errorElement);
+}
+
+/**
+ * Configurar listeners para gerenciar a sincronização do vídeo com a timeline
+ */
+function setupVideoTimelinesListeners(videoElement) {
+  // Quando o vídeo começa a rodar, manter a timeline em sincronização suave
+  videoElement.addEventListener('play', () => {
+    console.log('Vídeo iniciou, ativando sincronização suave com o vídeo');
+    // Forçar sincronização inicial exata
+    updateSequencePosition(
+      videoElement.currentTime, 
+      true, 
+      true, 
+      videoElement.playbackRate
+    );
+    // Desativar reprodução automática própria durante a reprodução do vídeo
+    setAutoPlay(false);
+  });
+  
+  // Quando o vídeo é pausado, ativar autoplay da timeline (animação independente)
+  videoElement.addEventListener('pause', () => {
+    console.log('Vídeo pausado, ativando animação independente da timeline');
+    // Informar que o vídeo está pausado
+    updateSequencePosition(
+      videoElement.currentTime, 
+      false, 
+      false, 
+      videoElement.playbackRate
+    );
+    setAutoPlay(true);
+  });
+  
+  // Durante a reprodução do vídeo, atualizar o tempo alvo para interpolação suave
+  videoElement.addEventListener('timeupdate', () => {
+    // Atualizar o tempo alvo (sem forçar posição imediata)
+    // Passar o status de reprodução do vídeo e sua taxa de reprodução
+    updateSequencePosition(
+      videoElement.currentTime, 
+      false, 
+      !videoElement.paused, 
+      videoElement.playbackRate
+    );
+  });
+  
+  // Quando o usuário navega no vídeo (seek), forçar sincronização imediata
+  videoElement.addEventListener('seeking', () => {
+    console.log('Usuário navegou no vídeo, sincronizando imediatamente');
+    updateSequencePosition(
+      videoElement.currentTime, 
+      true, 
+      !videoElement.paused, 
+      videoElement.playbackRate
+    );
+  });
+  
+  // Adicionar listener para mudanças na taxa de reprodução do vídeo
+  videoElement.addEventListener('ratechange', () => {
+    console.log(`Taxa de reprodução do vídeo alterada para ${videoElement.playbackRate}x`);
+    updateSequencePosition(
+      videoElement.currentTime, 
+      false, 
+      !videoElement.paused, 
+      videoElement.playbackRate
+    );
+  });
+}
+
+/**
+ * Adicionar botão para controlar a reprodução automática da timeline
+ */
+function addTimelineControlButton() {
+  // Botão para controlar modo automático
+  const timelineButton = document.createElement('button');
+  timelineButton.textContent = '⏱️ Timeline Auto';
+  timelineButton.style.position = 'fixed';
+  timelineButton.style.bottom = '130px';
+  timelineButton.style.right = '20px';
+  timelineButton.style.padding = '10px';
+  timelineButton.style.background = '#1E88E5';
+  timelineButton.style.color = 'white';
+  timelineButton.style.border = 'none';
+  timelineButton.style.borderRadius = '4px';
+  timelineButton.style.zIndex = '9999';
+  
+  let autoPlayActive = true;
+  
+  timelineButton.addEventListener('click', () => {
+    autoPlayActive = !autoPlayActive;
+    setAutoPlay(autoPlayActive);
+    timelineButton.style.background = autoPlayActive ? '#1E88E5' : '#757575';
+    timelineButton.textContent = autoPlayActive ? '⏱️ Timeline Auto (ON)' : '⏱️ Timeline Auto (OFF)';
+  });
+  
+  document.body.appendChild(timelineButton);
+  
+  // Botão para controlar velocidade
+  const speedButton = document.createElement('button');
+  speedButton.textContent = '🚀 Velocidade 1x';
+  speedButton.style.position = 'fixed';
+  speedButton.style.bottom = '180px';
+  speedButton.style.right = '20px';
+  speedButton.style.padding = '10px';
+  speedButton.style.background = '#4CAF50';
+  speedButton.style.color = 'white';
+  speedButton.style.border = 'none';
+  speedButton.style.borderRadius = '4px';
+  speedButton.style.zIndex = '9999';
+  
+  const speeds = [0.5, 1, 2, 3];
+  let currentSpeedIndex = 1;
+  
+  speedButton.addEventListener('click', () => {
+    currentSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
+    const newSpeed = speeds[currentSpeedIndex];
+    setPlaybackRate(newSpeed);
+    speedButton.textContent = `🚀 Velocidade ${newSpeed}x`;
+  });
+  
+  document.body.appendChild(speedButton);
+  
+  // Botão para controlar o modo de sincronização
+  const syncButton = document.createElement('button');
+  syncButton.textContent = '🔄 Sync Suave (ON)';
+  syncButton.style.position = 'fixed';
+  syncButton.style.bottom = '230px';
+  syncButton.style.right = '20px';
+  syncButton.style.padding = '10px';
+  syncButton.style.background = '#FF9800';
+  syncButton.style.color = 'white';
+  syncButton.style.border = 'none';
+  syncButton.style.borderRadius = '4px';
+  syncButton.style.zIndex = '9999';
+  
+  let smoothSyncActive = true;
+  
+  syncButton.addEventListener('click', () => {
+    smoothSyncActive = !smoothSyncActive;
+    setSmoothSync(smoothSyncActive);
+    syncButton.style.background = smoothSyncActive ? '#FF9800' : '#757575';
+    syncButton.textContent = smoothSyncActive ? '🔄 Sync Suave (ON)' : '🔄 Sync Suave (OFF)';
+  });
+  
+  document.body.appendChild(syncButton);
+  
+  // Botão para controlar o nível de suavidade da interpolação
+  const smoothnessButton = document.createElement('button');
+  smoothnessButton.textContent = '🧈 Suavidade: Normal';
+  smoothnessButton.style.position = 'fixed';
+  smoothnessButton.style.bottom = '280px';
+  smoothnessButton.style.right = '20px';
+  smoothnessButton.style.padding = '10px';
+  smoothnessButton.style.background = '#9C27B0';
+  smoothnessButton.style.color = 'white';
+  smoothnessButton.style.border = 'none';
+  smoothnessButton.style.borderRadius = '4px';
+  smoothnessButton.style.zIndex = '9999';
+  
+  const smoothnessLabels = ['Preciso', 'Normal', 'Super Suave'];
+  let currentSmoothnessLevel = 2; // Começa com o nível 2 (equilibrado)
+  
+  smoothnessButton.addEventListener('click', () => {
+    // Ciclar entre os níveis 1, 2 e 3
+    currentSmoothnessLevel = (currentSmoothnessLevel % 3) + 1;
+    setSmoothness(currentSmoothnessLevel);
+    
+    // Atualizar o texto do botão
+    smoothnessButton.textContent = `🧈 Suavidade: ${smoothnessLabels[currentSmoothnessLevel - 1]}`;
+  });
+  
+  document.body.appendChild(smoothnessButton);
 }
 
 // Adicionar botão de depuração

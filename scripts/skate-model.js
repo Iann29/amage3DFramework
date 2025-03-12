@@ -22,13 +22,13 @@ export function loadSkateModel(scene) {
       (gltf) => {
         skateModel = gltf.scene;
         
+        // IMPORTANTE: Configurar como invisível ANTES de adicionar à cena
+        skateModel.visible = false;
+        
         // Configurar propriedades iniciais
         skateModel.position.set(0, 0, 0);
         skateModel.scale.set(0.08, 0.08, 0.08);
         skateModel.rotation.set(0, 0, 0);
-        
-        // Garantir que o modelo esteja visível
-        skateModel.visible = true;
         
         // Configurar sombras
         skateModel.traverse(node => {
@@ -38,13 +38,13 @@ export function loadSkateModel(scene) {
           }
         });
         
-        // Adicionar à cena
+        // Adicionar à cena (agora já invisível)
         scene.add(skateModel);
         
         // Expor globalmente para acesso do Theatre.js
         window.skateModel = skateModel;
         
-        console.log('Modelo do skate carregado com sucesso');
+        console.log('Modelo do skate carregado com sucesso (inicialmente invisível)');
         resolve(skateModel);
       },
       // Progresso
