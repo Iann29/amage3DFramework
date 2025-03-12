@@ -5,6 +5,10 @@
 import Studio from '@theatre/studio';
 import { getProject, types } from '@theatre/core';
 
+// Inicializar o Studio IMEDIATAMENTE após a importação
+Studio.initialize();
+console.log('Theatre.js Studio inicializado corretamente');
+
 // Variáveis Theatre.js
 let project;
 let sheet;
@@ -15,42 +19,46 @@ let skateObj;
  * Inicializar o Theatre.js
  */
 export function initTheatre() {
-  // Inicializar Studio
-  Studio.initialize();
-  console.log('Theatre.js Studio inicializado');
-  
-  // Criar projeto
-  project = getProject('Skate 3D');
-  
-  // Criar sheet (timeline)
-  sheet = project.sheet('Main Animation');
-  
-  // Criar objeto para o skate
-  skateObj = sheet.object('Skate', {
-    visible: types.boolean(true),
-    position: {
-      x: types.number(0, { range: [-5, 5] }),
-      y: types.number(0, { range: [-5, 5] }),
-      z: types.number(0, { range: [-5, 5] })
-    },
-    rotation: {
-      x: types.number(0, { range: [-Math.PI, Math.PI] }),
-      y: types.number(0, { range: [-Math.PI, Math.PI] }),
-      z: types.number(0, { range: [-Math.PI, Math.PI] })
-    },
-    scale: types.number(0.08, { range: [0.01, 0.5] })
-  });
-  
-  // Definir listener para mudanças de valor
-  skateObj.onValuesChange((values) => {
-    updateModel(values);
-  });
-  
-  return {
-    project,
-    sheet,
-    skateObj
-  };
+  try {
+    // Criar projeto (não inicialize o Studio aqui - já foi feito acima)
+    project = getProject('Skate 3D');
+    console.log('Projeto Theatre.js criado');
+    
+    // Criar sheet (timeline)
+    sheet = project.sheet('Main Animation');
+    console.log('Sheet criada');
+    
+    // Criar objeto para o skate
+    skateObj = sheet.object('Skate', {
+      visible: types.boolean(true),
+      position: {
+        x: types.number(0, { range: [-5, 5] }),
+        y: types.number(0, { range: [-5, 5] }),
+        z: types.number(0, { range: [-5, 5] })
+      },
+      rotation: {
+        x: types.number(0, { range: [-Math.PI, Math.PI] }),
+        y: types.number(0, { range: [-Math.PI, Math.PI] }),
+        z: types.number(0, { range: [-Math.PI, Math.PI] })
+      },
+      scale: types.number(0.08, { range: [0.01, 0.5] })
+    });
+    console.log('Objeto skate criado no Theatre.js');
+    
+    // Definir listener para mudanças de valor
+    skateObj.onValuesChange((values) => {
+      updateModel(values);
+    });
+    
+    return {
+      project,
+      sheet,
+      skateObj
+    };
+  } catch (error) {
+    console.error('Erro ao inicializar o Theatre.js:', error);
+    throw error;
+  }
 }
 
 /**
@@ -64,16 +72,22 @@ export function createSequence(duration = 10) {
   }
   
   try {
-    // Criar sequência
+    console.log('Tentando criar sequência com duração:', duration);
+    
+    // O correto é sheet.sequence.create(), não sheet.createSequence()
     sequence = sheet.sequence.create({
       duration: duration,
       loop: false
     });
     
-    console.log('Sequência criada com duração:', duration);
+    if (!sequence) {
+      throw new Error('Falha ao criar a sequência - retornou undefined');
+    }
+    
+    console.log('Sequência criada com sucesso! Duração:', duration);
     return sequence;
   } catch (error) {
-    console.error('Erro ao criar sequência:', error);
+    console.error('ERRO ao criar sequência:', error);
     return null;
   }
 }
@@ -83,30 +97,39 @@ export function createSequence(duration = 10) {
  */
 export function setupKeyframes() {
   if (!sequence || !skateObj) {
-    console.error('Sequência ou objeto não inicializados');
+    console.error('Impossível configurar keyframes - sequence ou skateObj não inicializados');
     return;
   }
   
-  // Início - posição padrão
-  sequence.position = 0;
-  skateObj.props.position.x = 0;
-  skateObj.props.position.y = 0;
-  skateObj.props.rotation.y = 0;
+  console.log('Configurando keyframes na sequência...');
   
-  // Meio - rotação
-  sequence.position = 2;
-  skateObj.props.position.x = 1;
-  skateObj.props.rotation.y = Math.PI / 4;
-  
-  // Fim - outra posição e rotação
-  sequence.position = 4;
-  skateObj.props.position.x = -1;
-  skateObj.props.rotation.y = -Math.PI / 4;
-  
-  // Voltar para o início
-  sequence.position = 0;
-  
-  console.log('Keyframes configurados na sequência');
+  try {
+    // Início - posição padrão
+    sequence.position = 0;
+    skateObj.props.position.x = 0;
+    skateObj.props.position.y = 0;
+    skateObj.props.rotation.y = 0;
+    console.log('Keyframe 0s configurado');
+    
+    // Meio - rotação
+    sequence.position = 2;
+    skateObj.props.position.x = 1;
+    skateObj.props.rotation.y = Math.PI / 4;
+    console.log('Keyframe 2s configurado');
+    
+    // Fim - outra posição e rotação
+    sequence.position = 4;
+    skateObj.props.position.x = -1;
+    skateObj.props.rotation.y = -Math.PI / 4;
+    console.log('Keyframe 4s configurado');
+    
+    // Voltar para o início
+    sequence.position = 0;
+    
+    console.log('Todos os keyframes configurados com sucesso!');
+  } catch (error) {
+    console.error('Erro ao configurar keyframes:', error);
+  }
 }
 
 /**
