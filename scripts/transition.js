@@ -5,8 +5,8 @@
 import { gsap } from 'gsap';
 import { applyBlurEffect } from './video-handler.js';
 import { blurProps, skateModelProps, getCurrentValues, TIMECODES } from './animation.js';
-import { updateSkateModel } from './skate-model.js';
-import { enableModelInteraction } from './three-scene.js';
+import { updateSkateModel, getSkateModel } from './skate-model.js';
+import { enableModelInteraction, getSceneObject } from './three-scene.js';
 
 // Variáveis de controle para a transição
 let transitionActive = false;
@@ -108,6 +108,13 @@ function startTransition(progress) {
     return;
   }
   
+  // ADICIONAR: forçar visibilidade do modelo
+  const skateModel = getSceneObject('skateModel');
+  if (skateModel) {
+    skateModel.visible = true;
+    console.log('Forçando visibilidade do modelo durante transição');
+  }
+  
   // Atualizar o progresso
   transitionProgress = Math.max(0, Math.min(1, progress));
   
@@ -117,7 +124,7 @@ function startTransition(progress) {
     console.log('Iniciando transição');
     
     // Aplicar efeitos visuais iniciais
-    threeContainer.style.opacity = 0;
+    threeContainer.style.opacity = 0.5; // Começar com alguma opacidade
     threeContainer.classList.add('fade-in');
   }
   
@@ -146,7 +153,7 @@ function updateTransition(progress) {
   
   // Aplicar valores calculados
   videoContainer.style.opacity = videoOpacity;
-  threeContainer.style.opacity = modelOpacity;
+  threeContainer.style.opacity = Math.max(0.5, modelOpacity); // Garantir que tenha pelo menos alguma opacidade
   
   // Atualizar a intensidade do blur com base no progresso
   const blurValues = getCurrentValues(blurProps);

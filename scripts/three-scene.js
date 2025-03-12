@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { cameraProps, getCurrentValues } from './animation.js';
+import * as Animation from './animation.js';
 
 // Variáveis globais para Three.js
 let scene, camera, renderer, controls;
@@ -23,21 +23,31 @@ function initThreeScene() {
   
   // Criar a cena
   scene = new THREE.Scene();
-  scene.background = null; // Fundo transparente para sobrepor ao vídeo
+  scene.background = null; // Fundo transparente para permitir a visualização do vídeo
   
   // Configurar a câmera
   const aspectRatio = window.innerWidth / window.innerHeight;
   camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
-  camera.position.z = 5;
+  
+  // MODIFICAR: Posição da câmera para melhor visualização do skate
+  camera.position.set(0, 1, 5); // Ajustar altura e distância
+  camera.lookAt(0, 0, 0);
   
   // Configurar o renderer
   renderer = new THREE.WebGLRenderer({ 
     antialias: true,
-    alpha: true // Permitir transparência
+    alpha: true, // Permitir transparência
+    premultipliedAlpha: false // Importante para transparência correta
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(0x000000, 0); // Configurar cor de limpeza como transparente
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  
+  // Garantir que o container seja transparente
+  container.style.backgroundColor = 'transparent';
+  container.style.opacity = 1;
+  
   container.appendChild(renderer.domElement);
   
   // Adicionar iluminação
@@ -168,7 +178,7 @@ function animateThreeScene() {
  * Atualizar a câmera com base nas propriedades do Theatre.js
  */
 function updateCameraFromProps() {
-  const values = getCurrentValues(cameraProps);
+  const values = Animation.getCurrentValues(Animation.cameraProps);
   
   if (values) {
     // Atualizar posição da câmera
@@ -249,3 +259,7 @@ export {
   camera,
   renderer
 };
+
+// Criar aliases para manter compatibilidade com importações existentes
+export const initScene = initThreeScene;
+export const setupSceneInteractivity = enableModelInteraction;

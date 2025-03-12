@@ -187,13 +187,16 @@ function processModel(gltf) {
   // Obter o modelo do objeto GLTF
   skateModel = gltf.scene;
   
-  // Configurar posição e escala inicial - Aumentando o tamanho e ajustando a posição
-  skateModel.position.set(0, 0, 0);
-  skateModel.scale.set(3, 3, 3); // Aumentamos ainda mais a escala para o modelo ficar mais visível
-  skateModel.rotation.set(0, Math.PI / 4, 0); // Rotacionamos ligeiramente para melhor visualização
+  console.log('Modelo do skate carregado:', skateModel);
+  
+  // Configurar posição e escala inicial com os valores exatos
+  skateModel.position.set(0.887, 0, 0);
+  skateModel.scale.set(0.08860759493670611, 0.08860759493670611, 0.08860759493670611);
+  skateModel.rotation.set(0.239, 0, 0);
   
   // Tornar visível imediatamente (contornando a animação do Theatre.js por enquanto)
   skateModel.visible = true;
+  console.log('Visibilidade do modelo definida como:', skateModel.visible);
   
   // Otimizar o modelo
   optimizeModel(skateModel);
@@ -208,6 +211,20 @@ function processModel(gltf) {
   setupModelShadows(skateModel);
   
   console.log('Modelo processado e adicionado à cena', skateModel);
+  
+  // Configurar o container Three.js para ser visível e transparente
+  const threeContainer = document.getElementById('three-container');
+  if (threeContainer) {
+    threeContainer.style.opacity = 1;
+    threeContainer.style.backgroundColor = 'transparent';
+    threeContainer.style.pointerEvents = 'all';
+    console.log('Container Three.js configurado para ser visível e transparente');
+  }
+  
+  // Garantir que a cena tenha fundo transparente
+  if (scene) {
+    scene.background = null;
+  }
   
   // Adicionar um helper para visualizar o modelo
   addModelHelper();
