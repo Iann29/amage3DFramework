@@ -1,168 +1,318 @@
 /**
- * three-scene.js - Configuração e gerenciamento da cena Three.js
+ * three-scene.js - Gerenciamento da cena Three.js
+ * Este módulo centraliza toda a configuração e renderização da cena 3D
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import * as Animation from './animation.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { getCurrentValues, cameraProps } from './theatre-manager.js';
+import { updateSkateModel } from './skate-model.js';
 
-// Variáveis globais para Three.js
-let scene, camera, renderer, controls;
+// Variáveis da cena Three.js
+let scene;
+let camera;
+let renderer;
+let controls;
 let container;
-
-// Variáveis para controle de estado
+let animationFrameId;
 let isSceneReady = false;
-let sceneObjects = {};
+
+// Exportar variáveis para uso em outros módulos
+export let threeContainer;
 
 /**
  * Inicializar a cena Three.js
+ * @param {HTMLElement} containerElement - Elemento HTML para render
+ * @param {Object} cameraPropsTJ - Propriedades da câmera do Theatre.js
+ * @returns {Promise} Promessa resolvida quando a inicialização for concluída
  */
-function initThreeScene() {
-  // Obter o container para a cena Three.js
-  container = document.getElementById('three-container');
-  
-  // Criar a cena
-  scene = new THREE.Scene();
-  scene.background = null; // Fundo transparente para permitir a visualização do vídeo
-  
-  // Configurar a câmera
-  const aspectRatio = window.innerWidth / window.innerHeight;
-  camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
-  
-  // MODIFICAR: Posição da câmera para melhor visualização do skate
-  camera.position.set(0, 1, 5); // Ajustar altura e distância
-  camera.lookAt(0, 0, 0);
-  
-  // Configurar o renderer
-  renderer = new THREE.WebGLRenderer({ 
-    antialias: true,
-    alpha: true, // Permitir transparência
-    premultipliedAlpha: false // Importante para transparência correta
+export function initThreeScene(containerElement, cameraPropsTJ) {
+  return new Promise((resolve, reject) => {
+    try {
+      container = containerElement;
+      
+      // Criar cena
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
+      
+      // Criar câmera
+      camera = new THREE.PerspectiveCamera(
+        50, // FOV
+        container.clientWidth / container.clientHeight, // Aspect ratio
+        0.1, // Near plane
+        1000 // Far plane
+      );
+      camera.position.set(0, 1.5, 3);
+      camera.lookAt(0, 0, 0);
+      
+      // Criar renderer
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        alpha: true 
+      });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      
+      // Adicionar canvas ao container
+      container.appendChild(renderer.domElement);
+      
+      // Salvar referência ao container Three.js para outros módulos
+      threeContainer = container;
+      
+      // Configurar controles de câmera (desativados na intro do site)
+      controls = new OrbitControls(camera, renderer.domElement);
+      // Desabilitar interatividade para a intro do site
+      controls.enabled = false;
+      controls.enableDamping = true;
+      controls.enableRotate = false;
+      controls.enablePan = false;
+      controls.enableZoom = false;
+      
+      // Configurar iluminação
+      setupLighting();
+      
+      // Configurar redimensionamento responsivo
+      window.addEventListener('resize', onWindowResize);
+      
+      // Expor objetos globalmente para o Theatre.js
+      exposeGlobally();
+      
+      // Iniciar loop de animação
+      animate();
+      
+      isSceneReady = true;
+      resolve();
+    } catch (error) {
+      console.error('Erro ao inicializar a cena Three.js:', error);
+      reject(error);
+    }
   });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setClearColor(0x000000, 0); // Configurar cor de limpeza como transparente
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  
-  // Garantir que o container seja transparente
-  container.style.backgroundColor = 'transparent';
-  container.style.opacity = 1;
-  
-  container.appendChild(renderer.domElement);
-  
-  // Adicionar iluminação
-  setupLighting();
-  
-  // Configurar controles de órbita para interatividade
-  setupOrbitControls();
-  
-  // Adicionar listener para redimensionamento da janela
-  window.addEventListener('resize', onWindowResize);
-  
-  isSceneReady = true;
-  
-  return true;
+}
+
+// Expor objetos para uso global (necessário para o Theatre.js)
+function exposeGlobally() {
+  if (typeof window !== 'undefined') {
+    window.renderer = renderer;
+    window.scene = scene;
+    window.camera = camera;
+    console.log('Objetos Three.js expostos globalmente para uso do Theatre.js');
+  }
 }
 
 /**
- * Configurar a iluminação da cena
+ * Loop de animação da cena Three.js
  */
-function setupLighting() {
-  // Luz ambiente - aumentada para melhor visibilidade geral
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-  scene.add(ambientLight);
-  sceneObjects.ambientLight = ambientLight;
+function animate() {
+  animationFrameId = requestAnimationFrame(animate);
   
-  // Luz direcional principal - ajustada para iluminar o modelo frontalmente
-  const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  mainLight.position.set(2, 5, 5);
-  mainLight.castShadow = true;
-  scene.add(mainLight);
-  sceneObjects.mainLight = mainLight;
-  
-  // Configurações de sombra melhoradas
-  mainLight.shadow.mapSize.width = 2048;
-  mainLight.shadow.mapSize.height = 2048;
-  mainLight.shadow.camera.near = 0.5;
-  mainLight.shadow.camera.far = 50;
-  mainLight.shadow.bias = -0.0005;
-  
-  // Luz de preenchimento - aumentada e reposicionada
-  const fillLight = new THREE.DirectionalLight(0x8888ff, 0.7);
-  fillLight.position.set(-5, 2, -2);
-  scene.add(fillLight);
-  sceneObjects.fillLight = fillLight;
-  
-  // Luz de destaque (rim light) - intensificada para destacar bordas
-  const rimLight = new THREE.DirectionalLight(0xffffaa, 1.0);
-  rimLight.position.set(0, 5, -10);
-  scene.add(rimLight);
-  sceneObjects.rimLight = rimLight;
-  
-  // Luz adicional inferior para eliminar áreas escuras
-  const bottomLight = new THREE.DirectionalLight(0xaaaaff, 0.5);
-  bottomLight.position.set(0, -5, 0);
-  scene.add(bottomLight);
-  sceneObjects.bottomLight = bottomLight;
-  
-  console.log('Iluminação da cena configurada para melhor visualização do modelo');
+  if (isSceneReady) {
+    // Chamar diretamente o corpo da função interna de animação
+    // para evitar conflito com a exportação
+    if (controls) {
+      controls.update();
+    }
+    
+    updateCameraFromProps();
+    
+    renderer.render(scene, camera);
+  }
 }
 
 /**
- * Configurar controles de órbita para interação com o modelo 3D
+ * Redimensionar a cena ao redimensionar a janela
+ * Esta função também é exportada para uso externo
  */
-function setupOrbitControls() {
-  // Criar controles de órbita
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true; // Adicionar amortecimento para movimentos suaves
-  controls.dampingFactor = 0.05;
+export function updateSceneSize() {
+  if (!camera || !renderer || !container) return;
   
-  // Limitar zoom
-  controls.minDistance = 2;
-  controls.maxDistance = 10;
+  // Atualizar propriedades da câmera
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
   
-  // Desabilitar pan (arrastar)
-  controls.enablePan = false;
+  // Atualizar tamanho do renderer
+  renderer.setSize(container.clientWidth, container.clientHeight);
   
-  // Configurar limites de rotação vertical
-  controls.minPolarAngle = Math.PI / 6; // 30 graus do topo
-  controls.maxPolarAngle = Math.PI - Math.PI / 6; // 30 graus do fundo
-  
-  // Inicialmente desabilitado (será ativado após a transição)
-  controls.enabled = false;
+  console.log('Dimensões da cena atualizadas:', container.clientWidth, container.clientHeight);
 }
 
 /**
- * Lidar com redimensionamento da janela
+ * Método original para redimensionamento interno
+ * Agora apenas chama updateSceneSize para evitar duplicação
  */
 function onWindowResize() {
   updateSceneSize();
 }
 
 /**
- * Atualizar o tamanho da cena com base nas dimensões da janela
+ * Configurar a iluminação da cena
  */
-function updateSceneSize() {
-  if (!renderer || !camera) return;
+function setupLighting() {
+  // Adicionar luz ambiente
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
   
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  // Adicionar luz direcional (como luz solar)
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(1, 1, 1);
+  scene.add(directionalLight);
   
-  // Atualizar aspecto da câmera
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
+  // Adicionar uma luz extra de preenchimento para evitar sombras muito escuras
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight.position.set(-1, 0.5, -1);
+  scene.add(fillLight);
   
-  // Atualizar tamanho do renderer
-  renderer.setSize(width, height);
+  console.log('Iluminação da cena configurada para melhor visualização do modelo');
 }
 
 /**
- * Atualizar a cena Three.js (chamada no loop de animação)
+ * Atualizar a câmera com base nas propriedades do Theatre.js
  */
-function animateThreeScene() {
+export function updateCameraFromProps() {
+  // Verificar se cameraProps está inicializado antes de tentar obter valores
+  if (!cameraProps) {
+    console.warn('⚠️ cameraProps não está definido!');
+    return; // Sair da função se cameraProps não estiver definido
+  }
+  
+  try {
+    // Obter valores do Theatre.js
+    const values = getCurrentValues(cameraProps);
+    
+    // Verificação robusta para garantir que todos os valores necessários existem
+    if (values && values.position && values.lookAt) {
+      // Atualizar posição da câmera
+      if (values.position.x !== undefined) {
+        camera.position.x = values.position.x;
+      }
+      if (values.position.y !== undefined) {
+        camera.position.y = values.position.y;
+      }
+      if (values.position.z !== undefined) {
+        camera.position.z = values.position.z;
+      }
+      
+      // Atualizar ponto de foco
+      camera.lookAt(
+        values.lookAt.x || 0,
+        values.lookAt.y || 0,
+        values.lookAt.z || 0
+      );
+      
+      // Atualizar campo de visão
+      if (values.fov !== undefined) {
+        camera.fov = values.fov;
+        camera.updateProjectionMatrix();
+      }
+    }
+    
+    // Forçar renderização após atualizar a câmera
+    if (renderer && scene) {
+      renderer.render(scene, camera);
+    }
+  } catch (error) {
+    console.error('❌ Erro ao atualizar a câmera:', error);
+  }
+}
+
+/**
+ * Adicionar um objeto 3D à cena
+ * @param {THREE.Object3D} object - Objeto Three.js para adicionar à cena
+ */
+export function addToScene(object) {
+  if (!scene) return;
+  scene.add(object);
+}
+
+/**
+ * Remover um objeto 3D da cena
+ * @param {THREE.Object3D} object - Objeto Three.js para remover da cena
+ */
+export function removeFromScene(object) {
+  if (!scene) return;
+  scene.remove(object);
+}
+
+/**
+ * Limpar e desativar a cena Three.js
+ */
+export function cleanupThreeScene() {
+  // Cancelar loop de animação
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  
+  // Remover event listeners
+  window.removeEventListener('resize', onWindowResize);
+  
+  // Limpar renderer
+  if (renderer) {
+    renderer.dispose();
+    if (container && renderer.domElement) {
+      container.removeChild(renderer.domElement);
+    }
+  }
+  
+  // Limpar controles
+  if (controls) {
+    controls.dispose();
+  }
+  
+  // Limpar cena
+  if (scene) {
+    while (scene.children.length > 0) {
+      const object = scene.children[0];
+      scene.remove(object);
+    }
+  }
+  
+  // Resetar variáveis
+  scene = null;
+  camera = null;
+  renderer = null;
+  controls = null;
+  isSceneReady = false;
+}
+
+/**
+ * Obter a referência para a câmera atual
+ * @returns {THREE.Camera} Câmera atual da cena
+ */
+export function getCamera() {
+  return camera;
+}
+
+/**
+ * Obter a referência para a cena atual
+ * @returns {THREE.Scene} Cena atual
+ */
+export function getScene() {
+  return scene;
+}
+
+/**
+ * Obter a referência para o renderer atual
+ * @returns {THREE.WebGLRenderer} Renderer atual
+ */
+export function getRenderer() {
+  return renderer;
+}
+
+/**
+ * Configurar as propriedades da câmera para o Theatre.js
+ * @param {Object} props - Propriedades da câmera do Theatre.js
+ */
+export function setCameraProps(props) {
+  cameraProps = props;
+}
+
+/**
+ * Exportar a função de animação para uso externo
+ * Esta função permite animar elementos do Three.js a partir de outros módulos
+ */
+export function animateThreeScene() {
   if (!isSceneReady) return;
   
-  // Atualizar controles de órbita (para amortecimento)
+  // Atualizar elementos dinâmicos da cena
   if (controls) {
     controls.update();
   }
@@ -170,96 +320,26 @@ function animateThreeScene() {
   // Atualizar a câmera com base nos valores do Theatre.js
   updateCameraFromProps();
   
+  // Atualizar o modelo do skate com base nas propriedades do Theatre.js
+  updateSkateModel();
+  
   // Renderizar a cena
   renderer.render(scene, camera);
 }
 
 /**
- * Atualizar a câmera com base nas propriedades do Theatre.js
- */
-function updateCameraFromProps() {
-  const values = Animation.getCurrentValues(Animation.cameraProps);
-  
-  if (values) {
-    // Atualizar posição da câmera
-    camera.position.x = values.position.x;
-    camera.position.y = values.position.y;
-    camera.position.z = values.position.z;
-    
-    // Atualizar ponto de foco
-    camera.lookAt(
-      values.lookAt.x,
-      values.lookAt.y,
-      values.lookAt.z
-    );
-    
-    // Atualizar campo de visão
-    camera.fov = values.fov;
-    camera.updateProjectionMatrix();
-  }
-}
-
-/**
  * Ativar interatividade com o modelo 3D
  */
-function enableModelInteraction() {
-  if (controls) {
-    controls.enabled = true;
-  }
+export function enableModelInteractivity() {
+  if (!isSceneReady || !controls) return;
   
-  // Adicionar classe para permitir interatividade
-  container.classList.add('interactive');
+  // Configurar os controles de órbita para interação do usuário
+  controls.enableRotate = true;
+  controls.enableZoom = true;
+  controls.enablePan = true;
   
-  // Mostrar dicas de interação
-  const interactionHints = document.getElementById('interaction-hints');
-  interactionHints.classList.remove('hidden');
-  
-  // Esconder dicas após alguns segundos
-  setTimeout(() => {
-    interactionHints.classList.add('fade-out');
-    setTimeout(() => {
-      interactionHints.classList.add('hidden');
-    }, 1000);
-  }, 5000);
+  // Opcionalmente, ajustar limites e comportamento dos controles
+  controls.minDistance = 1;
+  controls.maxDistance = 10;
+  controls.dampingFactor = 0.1;
 }
-
-/**
- * Adicionar um objeto à cena
- * @param {THREE.Object3D} object - Objeto 3D a ser adicionado
- * @param {string} name - Nome para referência do objeto
- */
-function addObjectToScene(object, name) {
-  scene.add(object);
-  
-  if (name) {
-    sceneObjects[name] = object;
-  }
-  
-  return object;
-}
-
-/**
- * Obter um objeto da cena pelo nome
- * @param {string} name - Nome do objeto a ser obtido
- * @returns {THREE.Object3D|null} O objeto da cena ou null se não encontrado
- */
-function getSceneObject(name) {
-  return sceneObjects[name] || null;
-}
-
-// Exportar funções e variáveis para uso em outros módulos
-export {
-  initThreeScene,
-  animateThreeScene,
-  enableModelInteraction,
-  addObjectToScene,
-  getSceneObject,
-  updateSceneSize,
-  scene,
-  camera,
-  renderer
-};
-
-// Criar aliases para manter compatibilidade com importações existentes
-export const initScene = initThreeScene;
-export const setupSceneInteractivity = enableModelInteraction;

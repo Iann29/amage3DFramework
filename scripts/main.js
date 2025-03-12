@@ -4,12 +4,18 @@
  */
 
 // Importação dos módulos da aplicação
-import './animation.js';  // Apenas importar o módulo para que ele se inicialize
-import { initTheatre, setupSequence, TIMECODES } from './animation.js';
-import { initVideoHandler, videoElement, ensureVideoControlsInteractivity, getVideoState, setVideoTime, showVideoControls } from './video-handler.js';
-import { initThreeScene, animateThreeScene, updateSceneSize, getSceneObject, scene, initScene, setupSceneInteractivity } from './three-scene.js';
-import { loadSkateModel, setSkateModelVisible } from './skate-model.js';
-import { setupTransition } from './transition.js';
+import { 
+  init as initTheatreManager,
+  setupSequence,
+  setSequenceDuration,
+  TIMECODES,
+  goToTimecode,
+  setupKeyframes,
+  playSequence
+} from './theatre-manager.js';
+import { initVideoHandler, videoElement } from './video-handler.js';
+import { initThreeScene, animateThreeScene, updateSceneSize, updateCameraFromProps } from './three-scene.js';
+import { loadSkateModel, updateSkateModel } from './skate-model.js';
 
 // Variáveis globais
 let assetsLoaded = false;
@@ -35,7 +41,7 @@ async function init() {
   
   try {
     // Inicializar Theatre.js
-    await initTheatre();
+    await initTheatreManager();
     console.log('Theatre.js inicializado');
     
     // Inicializar manipulador de vídeo
@@ -43,40 +49,91 @@ async function init() {
     console.log('Manipulador de vídeo inicializado');
     
     // Inicializar cena Three.js
-    initThreeScene();
+    const threeContainer = document.getElementById('three-container');
+    if (!threeContainer) {
+      console.warn('Elemento three-container não encontrado, criando um novo elemento');
+      const newContainer = document.createElement('div');
+      newContainer.id = 'three-container';
+      newContainer.style.width = '100%';
+      newContainer.style.height = '100%';
+      newContainer.style.position = 'absolute';
+      newContainer.style.top = '0';
+      newContainer.style.left = '0';
+      newContainer.style.zIndex = '1';
+      document.body.appendChild(newContainer);
+      await initThreeScene(newContainer);
+    } else {
+      await initThreeScene(threeContainer);
+    }
     console.log('Cena Three.js inicializada');
     
     // Carregar modelo 3D do skate
     await loadSkateModel();
     console.log('Modelo 3D carregado');
     
-    // Configurar sequência e timeline
-    setupSequence();
-    console.log('Sequência configurada');
-    
-    // Configurar sistema de transição
-    setupTransition();
-    console.log('Sistema de transição configurado');
+    // Configurar timeline e sequência depois que o vídeo estiver pronto
+    setTimeout(() => {
+      // Garantir que o videoElement esteja disponível para a timeline
+      if (videoElement) {
+        // Configurar a sequência em Theatre.js
+        const sequenceInstance = setupSequence(videoElement);
+        
+        // Inicializar timeline somente após a sequência estar pronta
+        if (sequenceInstance) {
+          console.log('Sequência configurada com sucesso');
+          
+          // Configurar keyframes para controlar a visibilidade do modelo
+          setupKeyframes();
+          console.log('Keyframes configurados na timeline');
+          
+          // Iniciar a sequência imediatamente para sincronizar com o vídeo
+          if (videoElement.paused === false) {
+            console.log('Vídeo já está em reprodução, iniciando sequência automaticamente');
+            playSequence();
+          }
+          
+          // Nota: A configuração do sistema de transição foi removida
+          // A visibilidade do modelo agora será controlada diretamente 
+          // pela TIMELINE conforme solicitado pelo usuário
+        } else {
+          console.warn('Não foi possível configurar a sequência');
+        }
+      } else {
+        console.warn('Elemento de vídeo não disponível para configurar a timeline');
+      }
+    }, 500); // Pequeno delay para garantir que tudo esteja carregado
     
     // Configurar listeners de eventos
     setupEventListeners();
     
-    // Marcar aplicação como pronta
-    assetsLoaded = true;
+    // Esconder tela de carregamento após carregamento completo
+    if (loadingScreen) {
+      loadingScreen.style.opacity = 0;
+      setTimeout(() => {
+        loadingScreen.style.display = 'none';
+      }, 500);
+    }
+    
+    // Aplicação inicializada com sucesso
+    appState.isInitialized = true;
     applicationReady = true;
     
-    // Esconder tela de carregamento depois de tudo carregado
-    loadingScreen.classList.add('fade-out');
-    setTimeout(() => {
-      loadingScreen.classList.add('hidden');
-    }, 1000);
-    
-    // Iniciar o vídeo automaticamente
-    startExperience();
+    // Adicionar métodos públicos ao objeto window para depuração
+    setupPublicAPI();
     
   } catch (error) {
-    console.error('Erro durante a inicialização:', error);
-    showErrorMessage('Ocorreu um erro ao carregar a experiência. Por favor, recarregue a página.');
+    console.error('Erro durante a inicialização da aplicação:', error);
+    
+    // Exibir mensagem de erro amigável
+    if (loadingScreen) {
+      loadingScreen.innerHTML = `
+        <div class="error-message">
+          <h2>Erro na inicialização</h2>
+          <p>${error.message || 'Não foi possível carregar a aplicação.'}</p>
+          <button onclick="location.reload()">Tentar novamente</button>
+        </div>
+      `;
+    }
   }
 }
 
@@ -89,17 +146,32 @@ function setupEventListeners() {
   
   // Verificar compatibilidade WebGL
   checkWebGLCompatibility();
+  
+  // Listener para quando a duração do vídeo estiver disponível
+  document.addEventListener('video-duration-ready', (event) => {
+    const videoDuration = event.detail.duration;
+    console.log('Evento video-duration-ready recebido. Duração:', videoDuration);
+    
+    // Configurar a sequência com a duração correta do vídeo
+    if (typeof setSequenceDuration === 'function') {
+      setSequenceDuration(videoDuration);
+      console.log('Duração da sequência atualizada automaticamente para', videoDuration);
+    }
+    
+    // Ajustar os timecodes para a duração do vídeo
+    if (typeof adjustTimecodes === 'function') {
+      adjustTimecodes(videoDuration);
+      console.log('Timecodes ajustados automaticamente para a duração do vídeo');
+    }
+  });
 }
 
 /**
- * Lidar com redimensionamento da janela
+ * Manipulador de evento de redimensionamento da janela
  */
 function handleResize() {
-  // Atualizar dimensões da cena Three.js
-  // NÃO dispare outro evento 'resize' para evitar recursão infinita
-  if (typeof updateSceneSize === 'function') {
-    updateSceneSize();
-  }
+  // Atualizar tamanho da cena 3D
+  updateSceneSize();
 }
 
 /**
@@ -111,219 +183,83 @@ function checkWebGLCompatibility() {
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     
     if (!gl) {
-      showErrorMessage('Seu navegador não suporta WebGL, necessário para esta experiência.');
+      showBrowserCompatibilityWarning();
     }
   } catch (e) {
-    showErrorMessage('Ocorreu um erro ao verificar compatibilidade com WebGL.');
+    showBrowserCompatibilityWarning();
   }
 }
 
 /**
- * Exibir mensagem de erro na interface
- * @param {string} message - Mensagem de erro a ser exibida
+ * Exibir aviso de compatibilidade de navegador
  */
-function showErrorMessage(message) {
-  const loadingScreen = document.getElementById('loading-screen');
-  const loader = loadingScreen.querySelector('.loader');
+function showBrowserCompatibilityWarning() {
+  const warningElement = document.createElement('div');
+  warningElement.className = 'browser-warning';
+  warningElement.innerHTML = `
+    <div class="warning-content">
+      <h3>Aviso de Compatibilidade</h3>
+      <p>Seu navegador pode não suportar totalmente WebGL, necessário para a experiência 3D.</p>
+      <p>Para melhor experiência, use Google Chrome, Firefox ou Edge atualizados.</p>
+      <button onclick="this.parentNode.parentNode.style.display='none'">Entendi</button>
+    </div>
+  `;
   
-  if (loader) {
-    loader.remove();
-  }
-  
-  const errorMessage = document.createElement('div');
-  errorMessage.className = 'error-message';
-  errorMessage.textContent = message;
-  
-  loadingScreen.appendChild(errorMessage);
-  loadingScreen.classList.remove('hidden');
-  loadingScreen.classList.remove('fade-out');
+  document.body.appendChild(warningElement);
 }
 
 /**
- * Iniciar a experiência
+ * Configurar API pública para depuração
  */
-function startExperience() {
-  if (applicationReady) {
-    // Forçar a visibilidade do modelo antes de iniciar o vídeo
-    forceShowModel();
-    
-    // Garantir que os controles de vídeo funcionem
-    ensureVideoControlsInteractivity();
-    
-    // Mostrar controles de vídeo
-    showVideoControls();
-    
-    videoElement.play().catch(error => {
-      console.error('Erro ao reproduzir vídeo:', error);
-      
-      // Criar botão para iniciar manualmente devido a políticas de autoplay
-      const startButton = document.createElement('button');
-      startButton.textContent = 'Iniciar Experiência';
-      startButton.className = 'start-button';
-      startButton.addEventListener('click', () => {
-        videoElement.play();
-        // Forçar novamente a exibição do modelo quando o usuário clicar no botão
-        forceShowModel();
-        // Garantir interatividade dos controles
-        ensureVideoControlsInteractivity();
-        // Mostrar controles de vídeo novamente
-        showVideoControls();
-        startButton.remove();
-      });
-      
-      document.getElementById('ui-overlay').appendChild(startButton);
-    });
-    
-    // Adicionar um listener para garantir que o modelo seja exibido quando o vídeo começar
-    videoElement.addEventListener('playing', () => {
-      forceShowModel();
-      ensureVideoControlsInteractivity();
-      showVideoControls();
-    });
-  }
+function setupPublicAPI() {
+  // Método auxiliar para forçar a exibição do modelo
+  window.forceShowModelNow = () => {
+    console.log('Tentando forçar a exibição do modelo...');
+    const model = document.querySelector("#three-container");
+    if (model) {
+      model.style.opacity = 1;
+      model.style.visibility = 'visible';
+      model.style.display = 'block';
+      return true;
+    }
+    return false;
+  };
+  
+  // Método para acessar os timecodes diretamente
+  window.getTimecodes = () => TIMECODES;
+  
+  // Método para ir para um ponto específico da timeline
+  window.goToTimecode = (timecodeKey) => {
+    if (typeof goToTimecode === 'function' && TIMECODES && TIMECODES[timecodeKey]) {
+      goToTimecode(timecodeKey);
+      return true;
+    }
+    return false;
+  };
+  
+  // Método para obter o elemento de vídeo atual
+  window.getCurrentVideoElement = () => videoElement;
+  
+  // Expor funções de atualização para o fix do Theatre.js
+  window.updateSkateModel = updateSkateModel;
+  window.updateCameraFromProps = updateCameraFromProps;
+  
+  // Objeto centralizador para funções de atualização (para o fix)
+  window.theatreUpdateFunctions = {
+    updateSkateModel,
+    updateCameraFromProps
+  };
+  
+  // Para depuração direta no console do navegador
+  console.log('API pública para depuração configurada. Use window.forceShowModelNow(), window.getTimecodes() etc');
 }
 
-// Iniciar a aplicação quando o DOM estiver completamente carregado
+// Inicializar a aplicação quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', init);
 
-// Loop de animação principal
-function animate() {
-  requestAnimationFrame(animate);
-  
-  if (applicationReady) {
-    // Animar cena Three.js
-    animateThreeScene();
-  }
-}
-
-// Iniciar loop de animação
-animate();
-
-/**
- * Função de debugging para forçar a visibilidade do modelo
- * Pode ser chamada no console do navegador com: window.forceShowModel()
- */
-function forceShowModel() {
-  console.log('Tentando forçar a exibição do modelo...');
-  const skateModel = getSceneObject('skateModel');
-  if (skateModel) {
-    // Forçar visibilidade
-    skateModel.visible = true;
-    
-    // Ajustar posição e rotação exatamente como no Theatre.js
-    skateModel.position.set(0.887, 0, 0);
-    skateModel.rotation.set(0.239, 0, 0);
-    
-    // Ajustar escala exata
-    const exactScale = 0.08860759493670611;
-    skateModel.scale.set(exactScale, exactScale, exactScale);
-    
-    console.log('Modelo forçado a ficar visível:', skateModel);
-    
-    // Forçar container a ficar visível e garantir fundo transparente
-    const threeContainer = document.getElementById('three-container');
-    if (threeContainer) {
-      threeContainer.style.opacity = 1;
-      threeContainer.style.pointerEvents = 'all';
-      threeContainer.style.zIndex = 2;
-      threeContainer.style.backgroundColor = 'transparent';
-    }
-    
-    // Garantir que a cena tenha fundo transparente
-    if (typeof scene !== 'undefined' && scene) {
-      scene.background = null;
-    }
-    
-    // Garantir que o vídeo esteja visível e com controles funcionais
-    const videoContainer = document.getElementById('video-container');
-    if (videoContainer) {
-      videoContainer.style.opacity = 1;
-      videoContainer.style.zIndex = 1;
-      videoContainer.style.pointerEvents = 'auto';
-      
-      // Garantir que os controles de vídeo fiquem acima de tudo
-      const videoControls = document.getElementById('video-controls');
-      if (videoControls) {
-        videoControls.style.zIndex = 10;
-        videoControls.style.pointerEvents = 'auto';
-      }
-    }
-    
-    return true;
-  } else {
-    console.error('Modelo não encontrado na cena');
-    return false;
-  }
-}
-
-// Expor função ao escopo global para poder chamar no console
-window.forceShowModel = forceShowModel;
-
-/**
- * Pular diretamente para o estado interativo
- * Isso pula a animação/sequência e vai direto para o estado onde o modelo 3D é interativo
- */
-function skipToInteractive() {
-  if (!appState.isInitialized) return;
-  
-  // Definir o tempo do vídeo para o ponto em que a interatividade começa
-  setVideoTime(TIMECODES.INTERACTIVE_START);
-  
-  // Forçar a exibição do modelo
-  forceShowModel();
-  
-  // Mostrar dicas de interação
-  showInteractionHints();
-  
-  console.log('Pulando para estado interativo');
-}
-
-/**
- * Obter o estado atual da aplicação
- * @returns {Object} Estado atual da aplicação
- */
-function getAppState() {
-  return {
-    ...appState,
-    videoState: getVideoState(),
-  };
-}
-
-/**
- * Ocultar tela de carregamento
- */
-function hideLoadingScreen() {
-  const loadingScreen = document.getElementById('loading-screen');
-  if (loadingScreen) {
-    loadingScreen.classList.add('hidden');
-    
-    // Remover completamente após a animação terminar
-    setTimeout(() => {
-      loadingScreen.style.display = 'none';
-    }, 500);
-  }
-}
-
-/**
- * Mostrar dicas de interação
- */
-function showInteractionHints() {
-  const hints = document.getElementById('interaction-hints');
-  if (hints) {
-    hints.classList.remove('hidden');
-    
-    // Ocultar após alguns segundos
-    setTimeout(() => {
-      hints.classList.add('hidden');
-    }, 5000);
-  }
-}
-
-// Exportar funções e variáveis para uso em outros módulos
+// Exportar funções principais
 export {
-  assetsLoaded,
-  applicationReady,
-  forceShowModel,
-  skipToInteractive,
-  getAppState
+  init,
+  appState,
+  videoElement
 };

@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { addObjectToScene, getSceneObject, scene } from './three-scene.js';
-import { skateModelProps, getCurrentValues } from './animation.js';
+import { addToScene, getScene } from './three-scene.js';
+import { skateModelProps, getCurrentValues } from './theatre-manager.js';
 
 // Variáveis globais
 let skateModel;
@@ -136,7 +136,7 @@ function createFallbackModel() {
   skateModel = group;
   
   // Adicionar à cena
-  addObjectToScene(skateModel, 'skateModel');
+  addToScene(skateModel);
   
   // Configurar propriedades iniciais
   skateModel.visible = false;
@@ -194,15 +194,15 @@ function processModel(gltf) {
   skateModel.scale.set(0.08860759493670611, 0.08860759493670611, 0.08860759493670611);
   skateModel.rotation.set(0.239, 0, 0);
   
-  // Tornar visível imediatamente (contornando a animação do Theatre.js por enquanto)
-  skateModel.visible = true;
+  // Inicializar como invisível para que a timeline do Theatre.js controle a visibilidade
+  skateModel.visible = false;
   console.log('Visibilidade do modelo definida como:', skateModel.visible);
   
   // Otimizar o modelo
   optimizeModel(skateModel);
   
   // Adicionar à cena
-  addObjectToScene(skateModel, 'skateModel');
+  addToScene(skateModel);
   
   // Configurar materiais
   setupModelMaterials(skateModel);
@@ -222,8 +222,9 @@ function processModel(gltf) {
   }
   
   // Garantir que a cena tenha fundo transparente
-  if (scene) {
-    scene.background = null;
+  const sceneObj = getScene();
+  if (sceneObj) {
+    sceneObj.background = null;
   }
   
   // Adicionar um helper para visualizar o modelo
@@ -343,25 +344,58 @@ function updateSkateModel() {
   const values = getCurrentValues(skateModelProps);
   
   if (values) {
-    // Atualizar visibilidade
+    // Atualizar visibilidade (sem interpolação, é um valor booleano)
     skateModel.visible = values.visible;
     
-    // Atualizar posição
-    skateModel.position.x = values.position.x;
-    skateModel.position.y = values.position.y;
-    skateModel.position.z = values.position.z;
+    // Criar vetores alvo a partir dos valores do Theatre.js
+    const targetPosition = new THREE.Vector3(
+      values.position.x,
+      values.position.y,
+      values.position.z
+    );
     
-    // Atualizar rotação
-    skateModel.rotation.x = values.rotation.x;
-    skateModel.rotation.y = values.rotation.y;
-    skateModel.rotation.z = values.rotation.z;
+    const targetRotation = new THREE.Euler(
+      values.rotation.x,
+      values.rotation.y,
+      values.rotation.z
+    );
     
-    // Atualizar escala
-    const scale = values.scale;
-    skateModel.scale.set(scale, scale, scale);
-  } else {
-    // Valores padrão caso não consiga obter do Theatre.js
-    skateModel.visible = true;
+    const targetScale = values.scale;
+    
+    // Exibir logs para diagnóstico
+    console.log('Valores do Theatre.js para o skate:',
+      '\nPosição:', targetPosition, 
+      '\nRotação:', targetRotation, 
+      '\nEscala:', targetScale
+    );
+    
+    // Aplicar os valores diretamente, mas com conversão adequada
+    // O Theatre.js pode estar usando graus enquanto o Three.js usa radianos
+    
+    // Aplicar posição
+    skateModel.position.copy(targetPosition);
+    
+    // Verificar se os valores de rotação estão em graus (valores grandes geralmente indicam graus)
+    // Em Three.js, as rotações são em radianos (valores entre -PI e PI, ~3.14 e ~-3.14)
+    const isLikelyDegrees = Math.abs(targetRotation.x) > Math.PI * 2 || 
+                            Math.abs(targetRotation.y) > Math.PI * 2 || 
+                            Math.abs(targetRotation.z) > Math.PI * 2;
+    
+    if (isLikelyDegrees) {
+      // Converter de graus para radianos
+      skateModel.rotation.set(
+        THREE.MathUtils.degToRad(targetRotation.x),
+        THREE.MathUtils.degToRad(targetRotation.y),
+        THREE.MathUtils.degToRad(targetRotation.z)
+      );
+      console.log('Convertendo rotações de graus para radianos:', skateModel.rotation);
+    } else {
+      // Já está em radianos
+      skateModel.rotation.set(targetRotation.x, targetRotation.y, targetRotation.z);
+    }
+    
+    // Aplicar escala
+    skateModel.scale.set(targetScale, targetScale, targetScale);
   }
 }
 

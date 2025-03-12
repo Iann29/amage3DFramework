@@ -1,9 +1,9 @@
 ---
-description: 
+description: Verificar
 globs: 
 alwaysApply: false
 ---
 
 # Your rule content
 
-- Sempre verifique se ja tem uma seção rodando na porta http://localhost:3000/ antes de rodar o comando para iniciar o site
+- não de o comando npm run dev

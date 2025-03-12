@@ -1,0 +1,15 @@
+Uma Sheet agrupa objetos que serão animados juntos e possui sua própria sequência (timeline) de animação. Pense na Sheet como uma timeline específica dentro do projeto para certos elementos. Os comandos e propriedades principais de uma Sheet são:
+
+sheet.object(key, propsConfig, options?) – Cria ou obtém um Objeto dentro da Sheet​. O parâmetro key é o nome único do objeto na Sheet. O parâmetro propsConfig define as propriedades (props) desse objeto e seus valores iniciais. Se um objeto com o nome fornecido já existir no estado, ele será retornado ao invés de criar um novo; caso contrário, é criado um novo objeto com as props definidas​. Por exemplo, sheet.object('Minha Caixa', { x: 0, y: 0 }) cria um objeto chamado "Minha Caixa" com duas props (x e y) iniciando em 0. É possível definir as props simplesmente passando um objeto JavaScript (os tipos serão inferidos) ou usando os tipos explícitos do Theatre (types.number, etc.) para mais controle.
+
+ -Observação: Desde a versão 0.5.1, pode-se reconfigurar um objeto existente chamando novamente sheet.object com o mesmo nome e passando { reconfigure: true } nas opções​. Isso permite adicionar ou modificar props de um objeto em tempo de execução sem recriá-lo ou recarregar a página (por exemplo, adicionar uma prop rotation a um objeto já existente).
+
+ sheet.detachObject(key) – Desanexa (remove) um objeto anteriormente criado da Sheet, interrompendo seu controle pela timeline. Esse comando é útil caso queiramos remover um objeto da animação programaticamente. Importante: se sheet.object(key) for chamado novamente depois de um detachObject para o mesmo objeto, os valores anteriores desse objeto não serão resetados para os valores iniciais – ou seja, ele mantém o último estado conhecido​. Além disso, note que detachObject não remove event listeners associados ao objeto; por exemplo, se você tinha usado object.onValuesChange(), precisará cancelar manualmente antes ou depois de chamar o detach​.
+
+ sheet.sequence – Propriedade que referencia a Sequência (Sequence) da Sheet​. A sequência é o objeto que representa a timeline de animação desta Sheet, contendo os keyframes, posição atual do playback, etc. A partir de sheet.sequence é possível controlar a reprodução (play/pause), acessar posição temporal, vincular áudio, etc. (ver seção Sequência abaixo). Cada Sheet possui exatamente uma Sequence associada a ela​.
+
+ sheet.project – Propriedade que referencia o Projeto ao qual esta Sheet pertence​. Útil caso se precise obter o projeto pai a partir de uma Sheet (por exemplo, sheet.project.getAssetUrl(...) para pegar algum asset). Geralmente, você já tem a instância do projeto em escopo, então essa propriedade é principalmente informativa.
+
+ sheet.address – Objeto com identificadores únicos desta Sheet no contexto do Theatre​. Contém projectId, sheetId e sheetInstanceId que identificam unicamente a Sheet e sua instância. Assim como em project.address, normalmente não é necessário usar isso diretamente a menos que esteja em um caso avançado.
+
+ 

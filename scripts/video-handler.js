@@ -1,9 +1,10 @@
 /**
  * video-handler.js - Controle do vídeo e eventos relacionados
+ * Agora com responsabilidades mais específicas após refatoração
  */
 
-import { updateTimelineFromVideo, TIMECODES } from './animation.js';
-import { startTransition } from './transition.js';
+import { handleTimeUpdate, init as initVideoSync } from './video-sync.js';
+import { playSequence, pauseSequence, goToTimecode, updateTimelineFromVideo } from './theatre-manager.js';
 
 // Elementos do DOM - serão inicializados após o DOM estar carregado
 let videoElement;
@@ -41,6 +42,9 @@ function initVideoHandler() {
     return false;
   }
   
+  // Inicializar sincronização de vídeo
+  initVideoSync(videoElement, videoState);
+  
   // Configurar eventos para o vídeo
   setupVideoEvents();
   
@@ -70,6 +74,12 @@ function setupVideoEvents() {
     
     // Forçar exibição dos controles
     showVideoControls();
+    
+    // Notificar que a duração do vídeo está disponível (para uso em outros módulos)
+    const event = new CustomEvent('video-duration-ready', {
+      detail: { duration: videoState.duration }
+    });
+    document.dispatchEvent(event);
   });
   
   // Evento de reprodução iniciada
@@ -78,6 +88,22 @@ function setupVideoEvents() {
     videoState.isBuffering = false;
     updatePlayPauseButton();
     startProgressUpdate();
+    
+    // Iniciar também a sequência do Theatre.js quando o vídeo começar
+    try {
+      console.log('🎬 Vídeo iniciado - Tentando sincronizar timeline automaticamente');
+      playSequence({
+        rate: videoElement.playbackRate, // Usar mesma velocidade de reprodução do vídeo
+      });
+      
+      // Forçar a posição da timeline para corresponder ao vídeo
+      if (typeof updateTimelineFromVideo === 'function') {
+        updateTimelineFromVideo(videoElement.currentTime);
+        console.log('🔄 Timeline sincronizada com tempo do vídeo:', videoElement.currentTime);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao sincronizar timeline com vídeo:', error);
+    }
     
     // Garantir interatividade dos controles
     ensureVideoControlsInteractivity();
@@ -92,6 +118,10 @@ function setupVideoEvents() {
     updatePlayPauseButton();
     stopProgressUpdate();
     
+    // Pausar também a sequência do Theatre.js quando o vídeo for pausado
+    pauseSequence();
+    console.log('⏸️ Vídeo pausado - Timeline pausada automaticamente');
+    
     // Atualizar o estado do vídeo
     videoState.currentTime = videoElement.currentTime;
     videoState.progress = calculateProgress(videoState.currentTime);
@@ -102,7 +132,17 @@ function setupVideoEvents() {
   });
   
   // Evento de atualização de tempo
-  videoElement.addEventListener('timeupdate', handleTimeUpdate);
+  videoElement.addEventListener('timeupdate', () => {
+    // Atualizar o estado do vídeo internamente
+    videoState.currentTime = videoElement.currentTime;
+    videoState.progress = calculateProgress(videoState.currentTime);
+    
+    // Atualizar interface do vídeo
+    updateProgressBar(videoState.progress);
+    
+    // Delegar para o módulo de sincronização
+    handleTimeUpdate();
+  });
   
   // Evento de término do vídeo
   videoElement.addEventListener('ended', () => {
@@ -112,6 +152,14 @@ function setupVideoEvents() {
     updatePlayPauseButton();
     stopProgressUpdate();
     updateVideoUI();
+    
+    // Pausar a sequência do Theatre.js e resetar para o início
+    pauseSequence();
+    // Voltar para o início da timeline
+    if (typeof goToTimecode === 'function') {
+      goToTimecode('START');
+    }
+    console.log('🔄 Vídeo terminado - Timeline reiniciada');
     
     // Mostrar controles no final do vídeo
     showVideoControls();
@@ -172,7 +220,84 @@ function setupVideoControls() {
  * Pré-carregar o vídeo
  */
 function preloadVideo() {
-  videoElement.load();
+  if (!videoElement) return;
+  
+  // Garantir que o vídeo está visível com CSS
+  videoElement.style.display = 'block';
+  videoElement.style.opacity = '1';
+  
+  // Forçar o preload do vídeo
+  videoElement.preload = 'auto';
+  videoElement.muted = true; // Vídeos mutados têm maior chance de autoplay
+  videoElement.playsInline = true; // Necessário para iOS
+  
+  // Se o vídeo já tiver metadados carregados, continuar com a inicialização
+  if (videoElement.readyState >= 2) {
+    console.log('Vídeo já carregado, prosseguindo com inicialização e autoplay');
+    
+    // Tentar reproduzir o vídeo automaticamente
+    setTimeout(() => {
+      videoElement.play()
+        .then(() => console.log('✅ Autoplay do vídeo iniciado com sucesso'))
+        .catch(error => {
+          console.warn('⚠️ Erro ao reproduzir vídeo automaticamente:', error);
+          // Mostrar um botão de play para interação do usuário
+          showPlayButton();
+        });
+    }, 1000); // Pequeno delay para garantir que tudo esteja carregado
+  } else {
+    // Tentar carregar novamente
+    videoElement.load();
+    console.log('Forçando carregamento do vídeo');
+    
+    // Adicionar evento para tentar reproduzir quando estiver pronto
+    videoElement.addEventListener('canplaythrough', () => {
+      videoElement.play()
+        .then(() => console.log('✅ Autoplay do vídeo iniciado após carregamento'))
+        .catch(error => console.warn('⚠️ Erro ao reproduzir vídeo após carregamento:', error));
+    }, { once: true }); // once: true garante que o evento só será disparado uma vez
+  }
+}
+
+/**
+ * Mostrar um botão de play grande no centro da tela
+ * Usado quando o autoplay falha (comum em dispositivos móveis)
+ */
+function showPlayButton() {
+  // Verificar se já existe um botão
+  if (document.getElementById('big-play-button')) return;
+  
+  const button = document.createElement('button');
+  button.id = 'big-play-button';
+  button.innerHTML = '▶️';
+  button.style.position = 'absolute';
+  button.style.left = '50%';
+  button.style.top = '50%';
+  button.style.transform = 'translate(-50%, -50%)';
+  button.style.fontSize = '5rem';
+  button.style.background = 'rgba(0,0,0,0.5)';
+  button.style.color = 'white';
+  button.style.border = 'none';
+  button.style.borderRadius = '50%';
+  button.style.width = '100px';
+  button.style.height = '100px';
+  button.style.cursor = 'pointer';
+  button.style.zIndex = '1000';
+  
+  button.addEventListener('click', () => {
+    videoElement.play()
+      .then(() => {
+        button.remove();
+      })
+      .catch(error => console.error('Erro ao reproduzir vídeo após clique:', error));
+  });
+  
+  const videoContainer = document.getElementById('video-container');
+  if (videoContainer) {
+    videoContainer.appendChild(button);
+  } else {
+    document.body.appendChild(button);
+  }
 }
 
 /**
@@ -237,9 +362,6 @@ function seekVideo(event) {
   
   // Atualizar a UI
   updateVideoUI();
-  
-  // Atualizar a timeline do Theatre.js
-  updateTimelineFromVideo(seekTime);
 }
 
 /**
@@ -257,7 +379,10 @@ function updatePlayPauseButton() {
  */
 function startProgressUpdate() {
   stopProgressUpdate(); // Limpar intervalo anterior, se existir
-  progressUpdateInterval = setInterval(updateProgressBar, 50);
+  // Reduzir a frequência de atualização para melhorar desempenho (de 50ms para 100ms)
+  progressUpdateInterval = setInterval(() => {
+    updateProgressBar(calculateProgress(videoElement.currentTime));
+  }, 100);
 }
 
 /**
@@ -272,51 +397,16 @@ function stopProgressUpdate() {
 /**
  * Atualizar a barra de progresso com base no tempo atual do vídeo
  */
-function updateProgressBar() {
+function updateProgressBar(progress) {
   if (!videoElement || videoElement.duration <= 0) return;
   
   // Atualizar o estado do vídeo
   videoState.currentTime = videoElement.currentTime;
-  videoState.progress = calculateProgress(videoState.currentTime);
+  videoState.progress = progress || calculateProgress(videoState.currentTime);
   videoState.lastUpdateTime = Date.now();
   
   // Atualizar a interface
   updateVideoUI();
-}
-
-/**
- * Manipular atualizações de tempo do vídeo
- */
-function handleTimeUpdate() {
-  // Atualizar o estado do vídeo
-  videoState.currentTime = videoElement.currentTime;
-  videoState.progress = calculateProgress(videoState.currentTime);
-  
-  console.log("Tempo do vídeo atualizado:", videoState.currentTime);
-  
-  // Atualizar a timeline do Theatre.js com o tempo atual do vídeo
-  updateTimelineFromVideo(videoState.currentTime);
-  
-  // Atualizar a interface do usuário
-  updateVideoUI();
-  
-  // Garantir que o modelo do skate esteja sempre visível, independentemente do tempo do vídeo
-  if (typeof window.forceShowModel === 'function') {
-    window.forceShowModel();
-  }
-  
-  // Verificar se é o momento de iniciar a transição
-  if (videoState.currentTime >= TIMECODES.TRANSITION_START && 
-      videoState.currentTime <= TIMECODES.TRANSITION_END) {
-    
-    // Calcular o progresso da transição (0 a 1)
-    const transitionProgress = 
-      (videoState.currentTime - TIMECODES.TRANSITION_START) / 
-      (TIMECODES.TRANSITION_END - TIMECODES.TRANSITION_START);
-    
-    // Iniciar/atualizar a transição
-    startTransition(transitionProgress);
-  }
 }
 
 /**
@@ -327,7 +417,7 @@ function setVideoTime(time) {
   if (!videoElement) return;
   
   // Limitar o tempo dentro da duração do vídeo
-  const clampedTime = Math.max(0, Math.min(time, videoState.duration));
+  const clampedTime = Math.max(0, Math.min(time, videoState.duration || 0));
   
   // Definir o tempo no elemento de vídeo
   videoElement.currentTime = clampedTime;
@@ -353,6 +443,7 @@ function getVideoState() {
  * @param {number} intensity - Intensidade do blur (0-30)
  */
 function applyBlurEffect(intensity) {
+  if (!videoElement) return;
   videoElement.style.filter = `blur(${intensity}px)`;
 }
 
@@ -402,5 +493,6 @@ export {
   getVideoState,
   applyBlurEffect,
   ensureVideoControlsInteractivity,
-  showVideoControls
+  showVideoControls,
+  showPlayButton
 };
